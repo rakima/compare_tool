@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from zipfile import BadZipFile
@@ -138,27 +140,41 @@ class ExcelReportWriter:
 
     def write(self, source_new: Path, output: Path, result: CompareResult, detailed: bool = True) -> Path:
         workbook = None
+        temporary_output: Path | None = None
         try:
             output.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source_new, output)
-            workbook = load_workbook(output)
+            file_descriptor, temporary_name = tempfile.mkstemp(
+                dir=output.parent,
+                prefix=f".{output.stem}_",
+                suffix=".tmp.xlsx",
+            )
+            os.close(file_descriptor)
+            temporary_output = Path(temporary_name)
+            shutil.copy2(source_new, temporary_output)
+            workbook = load_workbook(temporary_output)
             report_name = self._unique_report_name(workbook.sheetnames)
             report = workbook.create_sheet(report_name, 0)
             self._write_report(report, result, detailed)
             self._highlight_differences(workbook, result)
-            workbook.save(output)
+            workbook.save(temporary_output)
+            # Close before replacing because Windows does not allow replacing
+            # a file that is still opened by openpyxl/zipfile.
+            workbook.close()
+            workbook = None
+            os.replace(temporary_output, output)
+            temporary_output = None
             result.output_path = output
             return output
-        except (PermissionError, OSError, InvalidFileException, BadZipFile, ValueError) as exc:
-            try:
-                if output.exists():
-                    output.unlink()
-            except OSError:
-                pass
+        except (PermissionError, OSError, InvalidFileException, BadZipFile, ValueError, shutil.Error) as exc:
             raise OutputWriteError(f"出力ファイルを保存できません: {output}") from exc
         finally:
             if workbook is not None:
                 workbook.close()
+            if temporary_output is not None:
+                try:
+                    temporary_output.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
     def _write_report(self, sheet: Worksheet, result: CompareResult, detailed: bool) -> None:
         sheet["A1"] = "比較サマリー"

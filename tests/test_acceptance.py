@@ -7,7 +7,8 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import PatternFill
 
 from compare_tool.errors import InvalidInputError, OutputWriteError, WorkbookReadError
-from compare_tool.models import CompareOptions, DifferenceType
+from compare_tool.excel import ExcelReportWriter
+from compare_tool.models import CompareOptions, CompareResult, DifferenceType
 from compare_tool.usecase import CompareUseCase
 
 
@@ -81,6 +82,38 @@ def test_unusable_output_parent_is_reported_as_write_error(tmp_path: Path) -> No
     parent_file.write_text("file", encoding="utf-8")
     with pytest.raises(OutputWriteError, match="保存できません"):
         CompareUseCase().execute(old, new, parent_file / "output.xlsx", CompareOptions())
+
+
+def test_existing_output_is_preserved_when_report_creation_fails(tmp_path: Path) -> None:
+    class FailingWriter(ExcelReportWriter):
+        def _write_report(self, sheet, result, detailed):
+            raise ValueError("simulated report failure")
+
+    source = make_workbook(tmp_path / "new.xlsx", {"Data": {"A1": "new"}})
+    output = tmp_path / "existing.xlsx"
+    original_content = b"existing output must survive"
+    output.write_bytes(original_content)
+
+    with pytest.raises(OutputWriteError):
+        FailingWriter().write(source, output, CompareResult())
+
+    assert output.read_bytes() == original_content
+    assert list(tmp_path.glob(".existing_*.tmp.xlsx")) == []
+
+
+def test_successful_report_atomically_replaces_existing_output(tmp_path: Path) -> None:
+    old = make_workbook(tmp_path / "old.xlsx", {"Data": {"A1": "old"}})
+    new = make_workbook(tmp_path / "new.xlsx", {"Data": {"A1": "new"}})
+    output = tmp_path / "existing.xlsx"
+    output.write_bytes(b"previous output")
+
+    CompareUseCase().execute(old, new, output, CompareOptions())
+
+    workbook = load_workbook(output)
+    assert workbook.sheetnames[0] == "比較結果"
+    assert workbook["Data"]["A1"].value == "new"
+    workbook.close()
+    assert list(tmp_path.glob(".existing_*.tmp.xlsx")) == []
 
 
 def test_existing_report_sheet_names_are_not_overwritten(tmp_path: Path) -> None:
