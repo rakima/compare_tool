@@ -7,3 +7,4 @@ build/
 dist/
 samples/*
 
+tests/test_settings.py
