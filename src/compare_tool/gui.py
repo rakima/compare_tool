@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .errors import CompareToolError
 from .models import CompareOptions
+from .settings import AppSettingsStore
 from .usecase import CompareUseCase
 
 try:
@@ -18,9 +19,16 @@ except ImportError:  # The application remains usable without optional DnD suppo
 
 
 class CompareApp:
-    def __init__(self, root: tk.Tk, use_case: CompareUseCase | None = None) -> None:
+    def __init__(
+        self,
+        root: tk.Tk,
+        use_case: CompareUseCase | None = None,
+        settings: AppSettingsStore | None = None,
+    ) -> None:
         self.root = root
         self.use_case = use_case or CompareUseCase()
+        self.settings = settings or AppSettingsStore()
+        self.last_save_dir = self.settings.load_last_save_dir()
         self.old_path = tk.StringVar()
         self.new_path = tk.StringVar()
         self.compare_values = tk.BooleanVar(value=True)
@@ -113,8 +121,10 @@ class CompareApp:
             return
         new_path = Path(self.new_path.get()) if self.new_path.get() else Path("新ファイル.xlsx")
         suggested = f"{new_path.stem}_比較結果.xlsx"
+        initial_dir = self._default_save_dir(new_path)
         output = filedialog.asksaveasfilename(
             title="比較結果の保存先", defaultextension=".xlsx", initialfile=suggested,
+            initialdir=str(initial_dir),
             filetypes=[("Excel", "*.xlsx")]
         )
         if not output:
@@ -144,6 +154,8 @@ class CompareApp:
             self.root.after(0, lambda exc=exc: self._failure(f"予期しないエラーが発生しました: {exc}"))
 
     def _success(self, output: str, detail: str) -> None:
+        self.last_save_dir = Path(output).resolve().parent
+        self.settings.save_last_save_dir(self.last_save_dir)
         self.compare_button.configure(state="normal")
         self.status.set("比較完了")
         self._log(f"比較完了: {detail}\n出力先: {output}")
@@ -154,6 +166,12 @@ class CompareApp:
         self.status.set("エラー")
         self._log(f"エラー: {message}")
         messagebox.showerror("エラー", message)
+
+    def _default_save_dir(self, new_path: Path) -> Path:
+        if self.last_save_dir is not None and self.last_save_dir.is_dir():
+            return self.last_save_dir
+        new_directory = new_path.expanduser().resolve().parent
+        return new_directory if new_directory.is_dir() else Path.cwd()
 
     def _log(self, message: str) -> None:
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -171,4 +189,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
