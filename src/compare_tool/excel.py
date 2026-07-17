@@ -190,8 +190,8 @@ class ExcelReportWriter:
             (DifferenceType.SHEET_DELETED, "シート削除件数"),
         ]
         for row, (kind, label) in enumerate(labels, 2):
-            sheet.cell(row, 1, label)
-            sheet.cell(row, 2, result.count(kind))
+            self._write_cell(sheet, row, 1, label)
+            self._write_cell(sheet, row, 2, result.count(kind))
 
         if not detailed:
             self._finish_layout(sheet)
@@ -203,6 +203,7 @@ class ExcelReportWriter:
             cell = sheet.cell(header_row, column, value)
             cell.font = Font(bold=True)
             cell.fill = self.HEADER_FILL
+            cell.alignment = self._default_alignment()
         for row, difference in enumerate(result.differences, header_row + 1):
             values = [
                 difference.kind.value,
@@ -212,12 +213,13 @@ class ExcelReportWriter:
                 difference.new_value,
             ]
             for column, value in enumerate(values, 1):
-                sheet.cell(row, column, self._display(value))
+                self._write_cell(sheet, row, column, self._display(value))
             if difference.can_link:
                 link = sheet.cell(row, 6, "ジャンプ")
                 escaped_sheet = difference.sheet.replace("'", "''")
                 link.hyperlink = f"#'{escaped_sheet}'!{difference.cell}"
                 link.style = "Hyperlink"
+                link.alignment = self._default_alignment()
         sheet.auto_filter.ref = f"A{header_row}:F{max(header_row, header_row + result.total)}"
         sheet.freeze_panes = f"A{header_row + 1}"
         self._finish_layout(sheet)
@@ -229,18 +231,25 @@ class ExcelReportWriter:
         text = str(value)
         return f"'{text}" if text.startswith("=") else value
 
+    @classmethod
+    def _write_cell(cls, sheet: Worksheet, row: int, column: int, value: object) -> None:
+        cell = sheet.cell(row, column, value)
+        cell.alignment = cls._default_alignment()
+
+    @staticmethod
+    def _default_alignment() -> Alignment:
+        return Alignment(vertical="top", wrap_text=True)
+
     @staticmethod
     def _finish_layout(sheet: Worksheet) -> None:
         widths = {"A": 18, "B": 24, "C": 12, "D": 36, "E": 36, "F": 12}
         for column, width in widths.items():
             sheet.column_dimensions[column].width = width
-        for row in sheet.iter_rows():
-            for cell in row:
-                cell.alignment = Alignment(vertical="top", wrap_text=True)
 
     def _highlight_differences(self, workbook: Workbook, result: CompareResult) -> None:
+        sheet_names = set(workbook.sheetnames)
         for difference in result.differences:
-            if not difference.cell or difference.sheet not in workbook.sheetnames:
+            if not difference.cell or difference.sheet not in sheet_names:
                 continue
             if difference.kind is DifferenceType.MODIFIED:
                 workbook[difference.sheet][difference.cell].fill = self.MODIFIED_FILL
