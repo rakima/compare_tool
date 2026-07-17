@@ -5,7 +5,6 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 
-
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = ROOT / "samples"
 
@@ -15,13 +14,17 @@ def add_common_sheet(workbook: Workbook, *, new: bool) -> None:
     sheet.title = "商品一覧"
     sheet.append(["商品ID", "商品名", "単価", "数量", "金額", "備考"])
     rows = (
-        ["P001", "ノートPC", 120000 if new else 100000, 2, "=C2*D2", "価格変更" if new else ""],
-        ["P002", "マウス", 2500, 10 if new else 8, "=C3*D3", "数量変更"],
-        ["P004", "Webカメラ", 8500, 4, "=C4*D4", "追加セル・行"],
-    ) if new else (
-        ["P001", "ノートPC", 100000, 2, "=C2*D2", ""],
-        ["P002", "マウス", 2500, 8, "=C3*D3", "数量変更"],
-        ["P003", "キーボード", 6000, 5, "=C4*D4", "新ファイルでは削除"],
+        (
+            ["P001", "ノートPC", 120000 if new else 100000, 2, "=C2*D2", "価格変更" if new else ""],
+            ["P002", "マウス", 2500, 10 if new else 8, "=C3*D3", "数量変更"],
+            ["P004", "Webカメラ", 8500, 4, "=C4*D4", "追加セル・行"],
+        )
+        if new
+        else (
+            ["P001", "ノートPC", 100000, 2, "=C2*D2", ""],
+            ["P002", "マウス", 2500, 8, "=C3*D3", "数量変更"],
+            ["P003", "キーボード", 6000, 5, "=C4*D4", "新ファイルでは削除"],
+        )
     )
     for row in rows:
         sheet.append(row)

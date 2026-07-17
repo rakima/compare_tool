@@ -2,8 +2,8 @@ from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
 
-from compare_tool.excel import CellData, ExcelComparer, ExcelDocument
 from compare_tool.errors import PasswordProtectedWorkbookError
+from compare_tool.excel import CellData, ExcelComparer, ExcelDocument
 from compare_tool.models import CompareOptions, DifferenceType
 from compare_tool.usecase import CompareUseCase
 

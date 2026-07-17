@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from zipfile import BadZipFile
@@ -10,6 +11,7 @@ from zipfile import BadZipFile
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils.exceptions import InvalidFileException
+from openpyxl.workbook.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from .comparer import Comparer
@@ -171,10 +173,8 @@ class ExcelReportWriter:
             if workbook is not None:
                 workbook.close()
             if temporary_output is not None:
-                try:
+                with suppress(OSError):
                     temporary_output.unlink(missing_ok=True)
-                except OSError:
-                    pass
 
     def _write_report(self, sheet: Worksheet, result: CompareResult, detailed: bool) -> None:
         sheet["A1"] = "比較サマリー"
@@ -201,7 +201,13 @@ class ExcelReportWriter:
             cell.font = Font(bold=True)
             cell.fill = self.HEADER_FILL
         for row, difference in enumerate(result.differences, header_row + 1):
-            values = [difference.kind.value, difference.sheet, difference.cell or "", difference.old_value, difference.new_value]
+            values = [
+                difference.kind.value,
+                difference.sheet,
+                difference.cell or "",
+                difference.old_value,
+                difference.new_value,
+            ]
             for column, value in enumerate(values, 1):
                 sheet.cell(row, column, self._display(value))
             if difference.can_link:
@@ -229,7 +235,7 @@ class ExcelReportWriter:
             for cell in row:
                 cell.alignment = Alignment(vertical="top", wrap_text=True)
 
-    def _highlight_differences(self, workbook, result: CompareResult) -> None:
+    def _highlight_differences(self, workbook: Workbook, result: CompareResult) -> None:
         for difference in result.differences:
             if not difference.cell or difference.sheet not in workbook.sheetnames:
                 continue

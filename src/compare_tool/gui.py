@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import threading
 import os
-from datetime import datetime
-from pathlib import Path
+import threading
 import tkinter as tk
+from datetime import datetime
+from functools import partial
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from typing import Any, cast
 
 from .errors import CompareToolError
 from .models import CompareOptions
@@ -33,7 +35,7 @@ class CompareApp:
         self.file_history = self.settings.load_file_history()
         self.last_output: Path | None = None
         self.is_busy = False
-        self.busy_controls: list[tk.Widget] = []
+        self.busy_controls: list[ttk.Widget] = []
         self.old_path = tk.StringVar()
         self.new_path = tk.StringVar()
         self.compare_values = tk.BooleanVar(value=True)
@@ -71,14 +73,14 @@ class CompareApp:
             ("大文字小文字を無視", self.ignore_case),
         ]
         for index, (text, variable) in enumerate(checks):
-            control = ttk.Checkbutton(options, text=text, variable=variable)
-            control.grid(row=index // 3, column=index % 3, sticky="w", padx=(0, 28), pady=3)
-            self.busy_controls.append(control)
+            checkbutton = ttk.Checkbutton(options, text=text, variable=variable)
+            checkbutton.grid(row=index // 3, column=index % 3, sticky="w", padx=(0, 28), pady=3)
+            self.busy_controls.append(checkbutton)
         ttk.Label(options, text="表示方法:").grid(row=2, column=0, sticky="w", pady=(9, 0))
         for column, text, value in [(1, "詳細表示", "detail"), (2, "サマリー表示", "summary")]:
-            control = ttk.Radiobutton(options, text=text, variable=self.view_mode, value=value)
-            control.grid(row=2, column=column, sticky="w", pady=(9, 0))
-            self.busy_controls.append(control)
+            radio = ttk.Radiobutton(options, text=text, variable=self.view_mode, value=value)
+            radio.grid(row=2, column=column, sticky="w", pady=(9, 0))
+            self.busy_controls.append(radio)
 
         actions = ttk.Frame(main)
         actions.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(0, 10))
@@ -110,7 +112,7 @@ class CompareApp:
         self.busy_controls.extend([entry, browse_button])
         if DND_FILES is not None and hasattr(entry, "drop_target_register"):
             entry.drop_target_register(DND_FILES)
-            entry.dnd_bind("<<Drop>>", lambda event: self._drop(event, variable))
+            cast(Any, entry).dnd_bind("<<Drop>>", lambda event: self._drop(event, variable))
         return entry
 
     def _browse(self, variable: tk.StringVar) -> None:
@@ -118,7 +120,7 @@ class CompareApp:
         if selected:
             variable.set(selected)
 
-    def _drop(self, event, variable: tk.StringVar) -> None:
+    def _drop(self, event: Any, variable: tk.StringVar) -> None:
         if self.is_busy:
             return
         paths = self.root.tk.splitlist(event.data)
@@ -139,9 +141,11 @@ class CompareApp:
         suggested = f"{new_path.stem}_比較結果.xlsx"
         initial_dir = self._default_save_dir(new_path)
         output = filedialog.asksaveasfilename(
-            title="比較結果の保存先", defaultextension=".xlsx", initialfile=suggested,
+            title="比較結果の保存先",
+            defaultextension=".xlsx",
+            initialfile=suggested,
             initialdir=str(initial_dir),
-            filetypes=[("Excel", "*.xlsx")]
+            filetypes=[("Excel", "*.xlsx")],
         )
         if not output:
             return
@@ -155,9 +159,11 @@ class CompareApp:
 
     def _options(self) -> CompareOptions:
         return CompareOptions(
-            compare_values=self.compare_values.get(), compare_formulas=self.compare_formulas.get(),
+            compare_values=self.compare_values.get(),
+            compare_formulas=self.compare_formulas.get(),
             empty_string_equals_empty=self.empty_equals_empty.get(),
-            ignore_surrounding_whitespace=self.ignore_whitespace.get(), ignore_case=self.ignore_case.get(),
+            ignore_surrounding_whitespace=self.ignore_whitespace.get(),
+            ignore_case=self.ignore_case.get(),
         )
 
     def _run_compare(self, old: str, new: str, output: str, options: CompareOptions, detailed: bool) -> None:
@@ -165,11 +171,11 @@ class CompareApp:
             result = self.use_case.execute(old, new, output, options, detailed)
             summary = result.summary()
             detail = "、".join(f"{kind.value}: {count}" for kind, count in summary.items())
-            self.root.after(0, lambda: self._success(output, detail))
+            self.root.after(0, partial(self._success, output, detail))
         except CompareToolError as exc:
-            self.root.after(0, lambda exc=exc: self._failure(str(exc)))
+            self.root.after(0, partial(self._failure, str(exc)))
         except Exception as exc:
-            self.root.after(0, lambda exc=exc: self._failure(f"予期しないエラーが発生しました: {exc}"))
+            self.root.after(0, partial(self._failure, f"予期しないエラーが発生しました: {exc}"))
 
     def _success(self, output: str, detail: str) -> None:
         self.last_save_dir = Path(output).resolve().parent
@@ -193,7 +199,7 @@ class CompareApp:
         state = "disabled" if busy else "normal"
         self.compare_button.configure(state=state)
         for control in self.busy_controls:
-            control.configure(state=state)
+            control.state(["disabled"] if busy else ["!disabled"])
         if busy:
             self.progress.start(12)
         else:
@@ -213,7 +219,7 @@ class CompareApp:
             self.open_button.configure(state="disabled")
             return
         try:
-            os.startfile(self.last_output)  # type: ignore[attr-defined]
+            os.startfile(self.last_output)
         except OSError as exc:
             self._log(f"出力ファイルを開けません: {exc}")
             messagebox.showerror("ファイルを開けません", str(exc))

@@ -33,7 +33,13 @@ compare-tool
 ## テスト
 
 ```powershell
-pytest
+python -m pip install -e ".[dev]"
+python -m ruff check .
+python -m ruff format --check .
+python -m mypy
+python -m pytest -q
 ```
+
+同じ品質チェックはGitHub ActionsでもPython 3.10／3.12（Windows）に対して自動実行されます。
 
 現在の対象は `.xlsx` のみです。書式、コメント、図形、画像、行高、列幅、テーブル定義は比較しません。

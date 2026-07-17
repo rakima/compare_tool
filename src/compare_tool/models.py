@@ -52,4 +52,3 @@ class CompareResult:
 
     def summary(self) -> dict[DifferenceType, int]:
         return {kind: self.count(kind) for kind in DifferenceType}
-

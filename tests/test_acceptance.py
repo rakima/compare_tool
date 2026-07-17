@@ -1,5 +1,6 @@
 """End-to-end acceptance tests using real .xlsx files."""
 
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ from compare_tool.models import CompareOptions, CompareResult, DifferenceType
 from compare_tool.usecase import CompareUseCase
 
 
-def make_workbook(path: Path, sheets: dict[str, dict[str, object]]) -> Path:
+def make_workbook(path: Path, sheets: Mapping[str, Mapping[str, object]]) -> Path:
     workbook = Workbook()
     workbook.remove(workbook.active)
     for name, cells in sheets.items():
@@ -26,12 +27,12 @@ def make_workbook(path: Path, sheets: dict[str, dict[str, object]]) -> Path:
 
 def compare(
     tmp_path: Path,
-    old_sheets: dict[str, dict[str, object]],
-    new_sheets: dict[str, dict[str, object]],
+    old_sheets: Mapping[str, Mapping[str, object]],
+    new_sheets: Mapping[str, Mapping[str, object]],
     *,
     detailed: bool = True,
     options: CompareOptions | None = None,
-):
+) -> tuple[CompareResult, Path]:
     old = make_workbook(tmp_path / "old.xlsx", old_sheets)
     new = make_workbook(tmp_path / "new.xlsx", new_sheets)
     output = tmp_path / "output.xlsx"
@@ -86,7 +87,7 @@ def test_unusable_output_parent_is_reported_as_write_error(tmp_path: Path) -> No
 
 def test_existing_output_is_preserved_when_report_creation_fails(tmp_path: Path) -> None:
     class FailingWriter(ExcelReportWriter):
-        def _write_report(self, sheet, result, detailed):
+        def _write_report(self, sheet: object, result: CompareResult, detailed: bool) -> None:
             raise ValueError("simulated report failure")
 
     source = make_workbook(tmp_path / "new.xlsx", {"Data": {"A1": "new"}})

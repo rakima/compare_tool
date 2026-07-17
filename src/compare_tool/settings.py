@@ -14,7 +14,10 @@ class AppSettingsStore:
     def load_last_save_dir(self) -> Path | None:
         try:
             data = self._read()
-            directory = Path(data["last_save_dir"])
+            value = data["last_save_dir"]
+            if not isinstance(value, str):
+                return None
+            directory = Path(value)
             return directory if directory.is_dir() else None
         except (KeyError, TypeError, ValueError):
             return None

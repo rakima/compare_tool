@@ -14,4 +14,3 @@ class Comparer(ABC, Generic[T]):
     @abstractmethod
     def compare(self, old: T, new: T, options: CompareOptions) -> CompareResult:
         raise NotImplementedError
-
