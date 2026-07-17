@@ -42,4 +42,12 @@ python -m pytest -q
 
 同じ品質チェックはGitHub ActionsでもPython 3.10／3.12（Windows）に対して自動実行されます。
 
+大容量・疎なExcelの性能回帰テストは、通常テストと分けて次のコマンドで実行できます。
+
+```powershell
+python -m pytest -m performance -q
+```
+
+GitHub Actionsでは毎週日曜日3時（日本時間）に実行され、必要なときは手動でも開始できます。
+
 現在の対象は `.xlsx` のみです。書式、コメント、図形、画像、行高、列幅、テーブル定義は比較しません。

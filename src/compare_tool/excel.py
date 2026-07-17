@@ -47,8 +47,11 @@ class ExcelReader:
         except OSError as exc:
             raise WorkbookReadError(f"ファイルを読み取れません: {path}") from exc
         try:
-            formulas_book = load_workbook(path, data_only=False, read_only=True)
-            values_book = load_workbook(path, data_only=True, read_only=True)
+            # Normal mode retains only cells explicitly stored in the worksheet
+            # XML. This avoids scanning a huge rectangle when formatting at a
+            # distant cell inflates the worksheet dimension.
+            formulas_book = load_workbook(path, data_only=False, read_only=False)
+            values_book = load_workbook(path, data_only=True, read_only=False)
         except PermissionError as exc:
             raise WorkbookReadError(f"ファイルを読み取れません: {path}") from exc
         except (BadZipFile, InvalidFileException, KeyError, OSError, ValueError) as exc:
@@ -62,14 +65,14 @@ class ExcelReader:
             for formula_sheet in formulas_book.worksheets:
                 value_sheet = values_book[formula_sheet.title]
                 cells: dict[str, CellData] = {}
-                for row in formula_sheet.iter_rows():
-                    for formula_cell in row:
-                        raw = formula_cell.value
-                        formula = raw if formula_cell.data_type == "f" else None
-                        value = value_sheet[formula_cell.coordinate].value if formula else raw
-                        data = CellData(value=value, formula=formula)
-                        if data.exists:
-                            cells[formula_cell.coordinate] = data
+                for position, formula_cell in formula_sheet._cells.items():
+                    raw = formula_cell.value
+                    formula = raw if formula_cell.data_type == "f" else None
+                    value_cell = value_sheet._cells.get(position)
+                    value = value_cell.value if formula and value_cell is not None else raw
+                    data = CellData(value=value, formula=formula)
+                    if data.exists:
+                        cells[formula_cell.coordinate] = data
                 sheets[formula_sheet.title] = cells
             return ExcelDocument(sheets)
         finally:
