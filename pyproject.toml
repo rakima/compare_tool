@@ -17,6 +17,7 @@ dependencies = [
 test = ["pytest>=8,<9"]
 dev = [
   "mypy>=1.11,<2",
+  "pyinstaller>=6.11,<7",
   "pytest>=8,<9",
   "ruff>=0.9,<1",
 ]

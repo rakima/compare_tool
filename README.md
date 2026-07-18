@@ -50,4 +50,17 @@ python -m pytest -m performance -q
 
 GitHub Actionsでは毎週日曜日3時（日本時間）に実行され、必要なときは手動でも開始できます。
 
+## Windows向け配布
+
+PyInstallerで単体の実行ファイルを作成できます。
+
+```powershell
+python -m pip install -e ".[dev]"
+python -m PyInstaller compare_tool.spec --noconfirm --clean
+```
+
+作成された実行ファイルは `dist\compare_tool.exe` です。配布前には、別フォルダへコピーして起動し、サンプルExcelで比較できることを確認してください。
+
+GitHub Actionsの `Build Windows App` は手動実行、または `v*` タグのpushでWindows実行ファイルをビルドし、artifactとして保存します。
+
 現在の対象は `.xlsx` のみです。書式、コメント、図形、画像、行高、列幅、テーブル定義は比較しません。
