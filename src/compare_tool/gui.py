@@ -158,6 +158,8 @@ class CompareApp:
         self.cancel_event = threading.Event()
         self.status.set("比較中...")
         self._log("比較を開始します。")
+        if self.view_mode.get() == "detail":
+            self._log("詳細表示では、差分が多い場合にレポート作成へ時間がかかることがあります。")
         args = (self.old_path.get(), self.new_path.get(), output, self._options(), self.view_mode.get() == "detail")
         threading.Thread(target=self._run_compare, args=args, daemon=True).start()
 
@@ -173,7 +175,15 @@ class CompareApp:
     def _run_compare(self, old: str, new: str, output: str, options: CompareOptions, detailed: bool) -> None:
         try:
             cancel_requested = self.cancel_event.is_set if self.cancel_event is not None else None
-            result = self.use_case.execute(old, new, output, options, detailed, cancel_requested)
+            result = self.use_case.execute(
+                old,
+                new,
+                output,
+                options,
+                detailed,
+                cancel_requested,
+                self._queue_progress,
+            )
             summary = result.summary()
             detail = "、".join(f"{kind.value}: {count}" for kind, count in summary.items())
             self.root.after(0, partial(self._success, output, detail))
@@ -183,6 +193,13 @@ class CompareApp:
             self.root.after(0, partial(self._failure, str(exc)))
         except Exception as exc:
             self.root.after(0, partial(self._failure, f"予期しないエラーが発生しました: {exc}"))
+
+    def _queue_progress(self, message: str) -> None:
+        self.root.after(0, partial(self._progress, message))
+
+    def _progress(self, message: str) -> None:
+        self.status.set(message)
+        self._log(message)
 
     def _success(self, output: str, detail: str) -> None:
         self.last_save_dir = Path(output).resolve().parent

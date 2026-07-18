@@ -8,6 +8,8 @@ from .excel import ExcelComparer, ExcelReader, ExcelReportWriter
 from .models import CompareOptions, CompareResult
 
 CancelCheck = Callable[[], bool]
+ProgressCallback = Callable[[str], None]
+LARGE_DIFFERENCE_NOTICE_THRESHOLD = 1_000
 
 
 class CompareUseCase:
@@ -29,6 +31,7 @@ class CompareUseCase:
         options: CompareOptions,
         detailed: bool = True,
         cancel_requested: CancelCheck | None = None,
+        progress_callback: ProgressCallback | None = None,
     ) -> CompareResult:
         old = self._validate(old_path, "旧ファイル")
         new = self._validate(new_path, "新ファイル")
@@ -41,9 +44,21 @@ class CompareUseCase:
             raise InvalidInputError("出力先には入力ファイルと異なるパスを指定してください。")
 
         self._raise_if_cancelled(cancel_requested)
-        result = self.comparer.compare(self.reader.read(old), self.reader.read(new), options, cancel_requested)
+        self._notify(progress_callback, "旧ファイルを読み込んでいます...")
+        old_document = self.reader.read(old)
         self._raise_if_cancelled(cancel_requested)
+        self._notify(progress_callback, "新ファイルを読み込んでいます...")
+        new_document = self.reader.read(new)
+        self._raise_if_cancelled(cancel_requested)
+        self._notify(progress_callback, "差分を検出しています...")
+        result = self.comparer.compare(old_document, new_document, options, cancel_requested)
+        self._raise_if_cancelled(cancel_requested)
+        self._notify(progress_callback, f"差分を {result.total:,} 件検出しました。")
+        if detailed and result.total >= LARGE_DIFFERENCE_NOTICE_THRESHOLD:
+            self._notify(progress_callback, "差分が多いため、詳細レポートの作成に時間がかかる場合があります。")
+        self._notify(progress_callback, "比較結果Excelを作成しています...")
         self.writer.write(new, output, result, detailed, cancel_requested)
+        self._notify(progress_callback, "比較結果Excelの作成が完了しました。")
         return result
 
     @staticmethod
@@ -66,3 +81,8 @@ class CompareUseCase:
     def _raise_if_cancelled(cancel_requested: CancelCheck | None) -> None:
         if cancel_requested is not None and cancel_requested():
             raise OperationCancelledError("比較をキャンセルしました。")
+
+    @staticmethod
+    def _notify(progress_callback: ProgressCallback | None, message: str) -> None:
+        if progress_callback is not None:
+            progress_callback(message)

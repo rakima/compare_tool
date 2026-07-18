@@ -182,6 +182,48 @@ def test_summary_mode_omits_detail_table_but_keeps_counts(tmp_path: Path) -> Non
     workbook.close()
 
 
+def test_large_detailed_compare_reports_output_notice(tmp_path: Path) -> None:
+    old_cells = {f"A{row}": f"old {row}" for row in range(1, 1001)}
+    new_cells = {f"A{row}": f"new {row}" for row in range(1, 1001)}
+    old = make_workbook(tmp_path / "old.xlsx", {"Data": old_cells})
+    new = make_workbook(tmp_path / "new.xlsx", {"Data": new_cells})
+    messages: list[str] = []
+
+    result = CompareUseCase().execute(
+        old,
+        new,
+        tmp_path / "output.xlsx",
+        CompareOptions(),
+        detailed=True,
+        progress_callback=messages.append,
+    )
+
+    assert result.total == 1000
+    assert "差分を 1,000 件検出しました。" in messages
+    assert "差分が多いため、詳細レポートの作成に時間がかかる場合があります。" in messages
+    assert messages[-1] == "比較結果Excelの作成が完了しました。"
+
+
+def test_large_summary_compare_does_not_report_detailed_notice(tmp_path: Path) -> None:
+    old_cells = {f"A{row}": f"old {row}" for row in range(1, 1001)}
+    new_cells = {f"A{row}": f"new {row}" for row in range(1, 1001)}
+    old = make_workbook(tmp_path / "old.xlsx", {"Data": old_cells})
+    new = make_workbook(tmp_path / "new.xlsx", {"Data": new_cells})
+    messages: list[str] = []
+
+    CompareUseCase().execute(
+        old,
+        new,
+        tmp_path / "output.xlsx",
+        CompareOptions(),
+        detailed=False,
+        progress_callback=messages.append,
+    )
+
+    assert "差分を 1,000 件検出しました。" in messages
+    assert "差分が多いため、詳細レポートの作成に時間がかかる場合があります。" not in messages
+
+
 def test_formula_text_change_is_reported_without_recalculation(tmp_path: Path) -> None:
     result, output = compare(
         tmp_path,
