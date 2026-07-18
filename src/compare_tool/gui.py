@@ -48,6 +48,8 @@ class CompareApp:
         self.settings = settings or AppSettingsStore()
         self.last_save_dir = self.settings.load_last_save_dir()
         self.file_history = self.settings.load_file_history()
+        saved_options = self.settings.load_compare_options()
+        saved_view_mode = self.settings.load_view_mode()
         self.last_output: Path | None = None
         self.is_busy = False
         self.cancel_event: threading.Event | None = None
@@ -56,16 +58,16 @@ class CompareApp:
         self.csv_only_controls: list[ttk.Widget] = []
         self.old_path = tk.StringVar()
         self.new_path = tk.StringVar()
-        self.compare_values = tk.BooleanVar(value=True)
-        self.compare_formulas = tk.BooleanVar(value=True)
-        self.empty_equals_empty = tk.BooleanVar(value=True)
-        self.ignore_whitespace = tk.BooleanVar(value=False)
-        self.ignore_case = tk.BooleanVar(value=False)
-        self.algorithm = tk.StringVar(value=CompareAlgorithm.CELL_COORDINATE.value)
-        self.key_columns = tk.StringVar()
-        self.csv_encoding = tk.StringVar(value="自動")
-        self.csv_delimiter = tk.StringVar(value="カンマ ,")
-        self.view_mode = tk.StringVar(value="detail")
+        self.compare_values = tk.BooleanVar(value=saved_options.compare_values)
+        self.compare_formulas = tk.BooleanVar(value=saved_options.compare_formulas)
+        self.empty_equals_empty = tk.BooleanVar(value=saved_options.empty_string_equals_empty)
+        self.ignore_whitespace = tk.BooleanVar(value=saved_options.ignore_surrounding_whitespace)
+        self.ignore_case = tk.BooleanVar(value=saved_options.ignore_case)
+        self.algorithm = tk.StringVar(value=saved_options.algorithm.value)
+        self.key_columns = tk.StringVar(value=",".join(saved_options.key_columns))
+        self.csv_encoding = tk.StringVar(value=self._csv_encoding_label(saved_options.csv_encoding))
+        self.csv_delimiter = tk.StringVar(value=self._csv_delimiter_label(saved_options.csv_delimiter))
+        self.view_mode = tk.StringVar(value=saved_view_mode)
         self.status = tk.StringVar(value="ファイルを指定してください")
         self._build()
         self.old_path.trace_add("write", self._on_input_path_changed)
@@ -359,6 +361,20 @@ class CompareApp:
             csv_delimiter=CSV_DELIMITERS[self.csv_delimiter.get()],
         )
 
+    @staticmethod
+    def _csv_encoding_label(value: str) -> str:
+        for label, encoding in CSV_ENCODINGS.items():
+            if encoding == value:
+                return label
+        return "自動"
+
+    @staticmethod
+    def _csv_delimiter_label(value: str) -> str:
+        for label, delimiter in CSV_DELIMITERS.items():
+            if delimiter == value:
+                return label
+        return "カンマ ,"
+
     def _key_columns(self) -> tuple[str, ...]:
         columns: list[str] = []
         for value in self.key_columns.get().replace("，", ",").split(","):
@@ -399,6 +415,8 @@ class CompareApp:
     def _success(self, output: str, detail: str) -> None:
         self.last_save_dir = Path(output).resolve().parent
         self.settings.save_last_save_dir(self.last_save_dir)
+        self.settings.save_compare_options(self._options())
+        self.settings.save_view_mode(self.view_mode.get())
         self._remember_inputs()
         self.last_output = Path(output).resolve()
         self._set_busy(False)

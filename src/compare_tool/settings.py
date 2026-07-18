@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 
+from .models import CompareAlgorithm, CompareOptions
+
 
 class AppSettingsStore:
     """Persists small GUI preferences independently from comparison logic."""
@@ -50,6 +52,55 @@ class AppSettingsStore:
         data["file_history"] = []
         self._write(data)
 
+    def load_view_mode(self) -> str:
+        value = self._read().get("view_mode")
+        return value if value in {"detail", "summary"} else "detail"
+
+    def save_view_mode(self, view_mode: str) -> None:
+        if view_mode not in {"detail", "summary"}:
+            return
+        data = self._read()
+        data["view_mode"] = view_mode
+        self._write(data)
+
+    def load_compare_options(self) -> CompareOptions:
+        raw = self._read().get("compare_options", {})
+        if not isinstance(raw, dict):
+            return CompareOptions()
+        defaults = CompareOptions()
+        return CompareOptions(
+            compare_values=self._bool(raw.get("compare_values"), defaults.compare_values),
+            compare_formulas=self._bool(raw.get("compare_formulas"), defaults.compare_formulas),
+            empty_string_equals_empty=self._bool(
+                raw.get("empty_string_equals_empty"),
+                defaults.empty_string_equals_empty,
+            ),
+            ignore_surrounding_whitespace=self._bool(
+                raw.get("ignore_surrounding_whitespace"),
+                defaults.ignore_surrounding_whitespace,
+            ),
+            ignore_case=self._bool(raw.get("ignore_case"), defaults.ignore_case),
+            algorithm=self._algorithm(raw.get("algorithm"), defaults.algorithm),
+            key_columns=self._key_columns(raw.get("key_columns")),
+            csv_encoding=self._string(raw.get("csv_encoding"), defaults.csv_encoding),
+            csv_delimiter=self._string(raw.get("csv_delimiter"), defaults.csv_delimiter),
+        )
+
+    def save_compare_options(self, options: CompareOptions) -> None:
+        data = self._read()
+        data["compare_options"] = {
+            "compare_values": options.compare_values,
+            "compare_formulas": options.compare_formulas,
+            "empty_string_equals_empty": options.empty_string_equals_empty,
+            "ignore_surrounding_whitespace": options.ignore_surrounding_whitespace,
+            "ignore_case": options.ignore_case,
+            "algorithm": options.algorithm.value,
+            "key_columns": list(options.key_columns),
+            "csv_encoding": options.csv_encoding,
+            "csv_delimiter": options.csv_delimiter,
+        }
+        self._write(data)
+
     def _read(self) -> dict[str, object]:
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
@@ -68,6 +119,29 @@ class AppSettingsStore:
             # Saving a convenience preference must not turn a successful
             # workbook comparison into an application error.
             pass
+
+    @staticmethod
+    def _bool(value: object, default: bool) -> bool:
+        return value if isinstance(value, bool) else default
+
+    @staticmethod
+    def _string(value: object, default: str) -> str:
+        return value if isinstance(value, str) else default
+
+    @staticmethod
+    def _algorithm(value: object, default: CompareAlgorithm) -> CompareAlgorithm:
+        if not isinstance(value, str):
+            return default
+        try:
+            return CompareAlgorithm(value)
+        except ValueError:
+            return default
+
+    @staticmethod
+    def _key_columns(value: object) -> tuple[str, ...]:
+        if not isinstance(value, list):
+            return ()
+        return tuple(item for item in value if isinstance(item, str))
 
     @staticmethod
     def _default_path() -> Path:

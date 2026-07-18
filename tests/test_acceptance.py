@@ -302,6 +302,28 @@ def test_clearing_file_history_preserves_last_save_directory(tmp_path: Path) -> 
     assert settings.load_last_save_dir() == output.resolve()
 
 
+def test_compare_options_and_view_mode_are_persisted(tmp_path: Path) -> None:
+    settings = AppSettingsStore(tmp_path / "settings.json")
+    options = CompareOptions(
+        compare_values=False,
+        compare_formulas=False,
+        empty_string_equals_empty=False,
+        ignore_surrounding_whitespace=True,
+        ignore_case=True,
+        algorithm=CompareAlgorithm.KEY_COLUMNS,
+        key_columns=("A", "C"),
+        csv_encoding="cp932",
+        csv_delimiter="\t",
+    )
+
+    settings.save_compare_options(options)
+    settings.save_view_mode("summary")
+
+    loaded = settings.load_compare_options()
+    assert loaded == options
+    assert settings.load_view_mode() == "summary"
+
+
 def test_successful_report_atomically_replaces_existing_output(tmp_path: Path) -> None:
     old = make_workbook(tmp_path / "old.xlsx", {"Data": {"A1": "old"}})
     new = make_workbook(tmp_path / "new.xlsx", {"Data": {"A1": "new"}})
