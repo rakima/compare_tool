@@ -234,6 +234,16 @@ def test_invalid_csv_delimiter_is_rejected(tmp_path: Path) -> None:
         )
 
 
+def test_csv_auto_encoding_failure_explains_next_action(tmp_path: Path) -> None:
+    old = tmp_path / "old.csv"
+    new = tmp_path / "new.csv"
+    old.write_bytes(b"\xff\xfe\x00\x80")
+    new.write_bytes(b"id,value\n1,new\n")
+
+    with pytest.raises(WorkbookReadError, match="UTF-8またはShift_JISで保存し直してください"):
+        CompareUseCase().execute(old, new, tmp_path / "output.xlsx", CompareOptions())
+
+
 def test_missing_input_file_is_rejected(tmp_path: Path) -> None:
     new = make_workbook(tmp_path / "new.xlsx", {"Data": {}})
     with pytest.raises(InvalidInputError, match="見つかりません"):
