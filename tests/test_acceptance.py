@@ -217,6 +217,26 @@ def test_row_lcs_report_summarizes_inserted_row(tmp_path: Path) -> None:
     workbook.close()
 
 
+def test_key_column_report_matches_moved_row_by_key(tmp_path: Path) -> None:
+    result, output = compare(
+        tmp_path,
+        {"Data": {"A1": "ID", "B1": "Value", "A2": "001", "B2": 10}},
+        {"Data": {"A1": "ID", "B1": "Value", "A5": "001", "B5": 20}},
+        options=CompareOptions(algorithm=CompareAlgorithm.KEY_COLUMNS, key_columns=("A",)),
+    )
+
+    assert result.count(DifferenceType.MODIFIED) == 1
+    assert result.count(DifferenceType.ROW_ADDED) == 0
+    assert result.count(DifferenceType.ROW_DELETED) == 0
+    workbook = load_workbook(output)
+    report = workbook["比較結果"]
+    assert report["A11"].value == "変更"
+    assert report["C11"].value == "B5"
+    assert report["D11"].value == 10
+    assert report["E11"].value == 20
+    workbook.close()
+
+
 def test_large_detailed_compare_reports_output_notice(tmp_path: Path) -> None:
     old_cells = {f"A{row}": f"old {row}" for row in range(1, 1001)}
     new_cells = {f"A{row}": f"new {row}" for row in range(1, 1001)}

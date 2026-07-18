@@ -19,6 +19,7 @@ class DifferenceType(str, Enum):
 class CompareAlgorithm(str, Enum):
     CELL_COORDINATE = "cell_coordinate"
     ROW_LCS = "row_lcs"
+    KEY_COLUMNS = "key_columns"
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +30,7 @@ class CompareOptions:
     ignore_surrounding_whitespace: bool = False
     ignore_case: bool = False
     algorithm: CompareAlgorithm = CompareAlgorithm.CELL_COORDINATE
+    key_columns: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

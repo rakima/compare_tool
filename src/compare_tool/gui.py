@@ -46,6 +46,7 @@ class CompareApp:
         self.ignore_whitespace = tk.BooleanVar(value=False)
         self.ignore_case = tk.BooleanVar(value=False)
         self.algorithm = tk.StringVar(value=CompareAlgorithm.CELL_COORDINATE.value)
+        self.key_columns = tk.StringVar()
         self.view_mode = tk.StringVar(value="detail")
         self.status = tk.StringVar(value="ファイルを指定してください")
         self._build()
@@ -97,11 +98,16 @@ class CompareApp:
         algorithms = [
             ("セル座標比較", CompareAlgorithm.CELL_COORDINATE.value),
             ("行追加/削除を考慮", CompareAlgorithm.ROW_LCS.value),
+            ("キー列で比較", CompareAlgorithm.KEY_COLUMNS.value),
         ]
         for column, (text, value) in enumerate(algorithms, 1):
             radio = ttk.Radiobutton(options, text=text, variable=self.algorithm, value=value)
             radio.grid(row=3, column=column, sticky="w", pady=(9, 0))
             self.busy_controls.append(radio)
+        ttk.Label(options, text="キー列:").grid(row=4, column=0, sticky="w", pady=(9, 0))
+        key_entry = ttk.Entry(options, textvariable=self.key_columns, width=18)
+        key_entry.grid(row=4, column=1, sticky="w", pady=(9, 0))
+        self.busy_controls.append(key_entry)
 
         actions = ttk.Frame(main)
         actions.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(0, 10))
@@ -225,7 +231,16 @@ class CompareApp:
             ignore_surrounding_whitespace=self.ignore_whitespace.get(),
             ignore_case=self.ignore_case.get(),
             algorithm=CompareAlgorithm(self.algorithm.get()),
+            key_columns=self._key_columns(),
         )
+
+    def _key_columns(self) -> tuple[str, ...]:
+        columns: list[str] = []
+        for value in self.key_columns.get().replace("，", ",").split(","):
+            column = value.strip().upper()
+            if column:
+                columns.append(column)
+        return tuple(columns)
 
     def _run_compare(self, old: str, new: str, output: str, options: CompareOptions, detailed: bool) -> None:
         try:

@@ -11,13 +11,19 @@ from zipfile import BadZipFile
 
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.utils.cell import coordinate_from_string
+from openpyxl.utils.cell import column_index_from_string, coordinate_from_string, get_column_letter
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.workbook.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from .comparer import CancelCheck, Comparer
-from .errors import OperationCancelledError, OutputWriteError, PasswordProtectedWorkbookError, WorkbookReadError
+from .errors import (
+    InvalidInputError,
+    OperationCancelledError,
+    OutputWriteError,
+    PasswordProtectedWorkbookError,
+    WorkbookReadError,
+)
 from .models import CompareAlgorithm, CompareOptions, CompareResult, Difference, DifferenceType
 
 
@@ -260,6 +266,96 @@ class RowLcsCompareAlgorithm(ExcelCompareAlgorithm):
         return list(reversed(matches))
 
 
+class KeyColumnCompareAlgorithm(ExcelCompareAlgorithm):
+    def __init__(self, cell_algorithm: CellCoordinateCompareAlgorithm | None = None) -> None:
+        self.cell_algorithm = cell_algorithm or CellCoordinateCompareAlgorithm()
+
+    def compare_sheet(
+        self,
+        sheet: str,
+        old_cells: dict[str, CellData],
+        new_cells: dict[str, CellData],
+        options: CompareOptions,
+        cancel_requested: CancelCheck | None = None,
+    ) -> list[Difference]:
+        key_columns = self._key_columns(options)
+        old_rows = self._rows_by_key(sheet, old_cells, key_columns, options, "旧ファイル", cancel_requested)
+        new_rows = self._rows_by_key(sheet, new_cells, key_columns, options, "新ファイル", cancel_requested)
+        result: list[Difference] = []
+
+        for key in sorted(old_rows.keys() - new_rows.keys()):
+            raise_if_cancelled(cancel_requested)
+            result.append(Difference(DifferenceType.ROW_DELETED, sheet, f"{old_rows[key]}:{old_rows[key]}"))
+        for key in sorted(new_rows.keys() - old_rows.keys()):
+            raise_if_cancelled(cancel_requested)
+            result.append(Difference(DifferenceType.ROW_ADDED, sheet, f"{new_rows[key]}:{new_rows[key]}"))
+        for key in sorted(old_rows.keys() & new_rows.keys()):
+            raise_if_cancelled(cancel_requested)
+            old_row = old_rows[key]
+            new_row = new_rows[key]
+            result.extend(
+                self.cell_algorithm.compare_sheet(
+                    sheet,
+                    self._row_cells_by_column(old_cells, old_row, new_row),
+                    self._row_cells(new_cells, new_row),
+                    options,
+                    cancel_requested,
+                )
+            )
+        return sorted(result, key=lambda difference: (difference.sheet, difference.cell or "", difference.kind.value))
+
+    @staticmethod
+    def _key_columns(options: CompareOptions) -> tuple[str, ...]:
+        if not options.key_columns:
+            raise InvalidInputError("キー列比較ではキー列を指定してください。")
+        return tuple(get_column_letter(column_index_from_string(column)) for column in options.key_columns)
+
+    def _rows_by_key(
+        self,
+        sheet: str,
+        cells: dict[str, CellData],
+        key_columns: tuple[str, ...],
+        options: CompareOptions,
+        label: str,
+        cancel_requested: CancelCheck | None,
+    ) -> dict[tuple[object, ...], int]:
+        rows: dict[tuple[object, ...], int] = {}
+        for row in RowLcsCompareAlgorithm._rows(cells):
+            raise_if_cancelled(cancel_requested)
+            key = tuple(self._normalize(self._cell_value(cells, column, row), options) for column in key_columns)
+            if all(value is None for value in key):
+                continue
+            if key in rows:
+                columns = ",".join(key_columns)
+                raise InvalidInputError(f"{label}のシート「{sheet}」でキー列 {columns} の値が重複しています。")
+            rows[key] = row
+        return rows
+
+    @staticmethod
+    def _cell_value(cells: dict[str, CellData], column: str, row: int) -> object:
+        data = cells.get(f"{column}{row}")
+        return None if data is None else data.value
+
+    @staticmethod
+    def _normalize(value: object, options: CompareOptions) -> object:
+        if options.empty_string_equals_empty and value == "":
+            value = None
+        if isinstance(value, str):
+            if options.ignore_surrounding_whitespace:
+                value = value.strip()
+            if options.ignore_case:
+                value = value.casefold()
+        return value
+
+    @staticmethod
+    def _row_cells(cells: dict[str, CellData], row: int) -> dict[str, CellData]:
+        return RowLcsCompareAlgorithm._row_cells(cells, row)
+
+    @staticmethod
+    def _row_cells_by_column(cells: dict[str, CellData], source_row: int, target_row: int) -> dict[str, CellData]:
+        return RowLcsCompareAlgorithm._row_cells_by_column(cells, source_row, target_row)
+
+
 def raise_if_cancelled(cancel_requested: CancelCheck | None) -> None:
     if cancel_requested is not None and cancel_requested():
         raise OperationCancelledError("比較をキャンセルしました。")
@@ -270,6 +366,7 @@ class ExcelComparer(Comparer[ExcelDocument]):
         self.algorithms = algorithms or {
             CompareAlgorithm.CELL_COORDINATE: CellCoordinateCompareAlgorithm(),
             CompareAlgorithm.ROW_LCS: RowLcsCompareAlgorithm(),
+            CompareAlgorithm.KEY_COLUMNS: KeyColumnCompareAlgorithm(),
         }
 
     def compare(

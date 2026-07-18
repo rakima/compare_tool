@@ -1,8 +1,9 @@
 from pathlib import Path
 
+import pytest
 from openpyxl import Workbook, load_workbook
 
-from compare_tool.errors import PasswordProtectedWorkbookError
+from compare_tool.errors import InvalidInputError, PasswordProtectedWorkbookError
 from compare_tool.excel import CellCoordinateCompareAlgorithm, CellData, ExcelComparer, ExcelDocument
 from compare_tool.models import CompareAlgorithm, CompareOptions, Difference, DifferenceType
 from compare_tool.usecase import CompareUseCase
@@ -75,6 +76,60 @@ def test_row_lcs_detects_deleted_row_without_shifting_following_rows() -> None:
     assert [(difference.kind, difference.cell) for difference in result.differences] == [
         (DifferenceType.ROW_DELETED, "2:2")
     ]
+
+
+def test_key_column_compare_matches_rows_by_key_and_reports_cell_change() -> None:
+    old = ExcelDocument(
+        {"S": {"A1": CellData("ID"), "B1": CellData("Value"), "A2": CellData("001"), "B2": CellData(10)}}
+    )
+    new = ExcelDocument(
+        {
+            "S": {
+                "A1": CellData("ID"),
+                "B1": CellData("Value"),
+                "A5": CellData("001"),
+                "B5": CellData(20),
+            }
+        }
+    )
+    result = ExcelComparer().compare(
+        old,
+        new,
+        CompareOptions(algorithm=CompareAlgorithm.KEY_COLUMNS, key_columns=("A",)),
+    )
+
+    actual = [
+        (difference.kind, difference.cell, difference.old_value, difference.new_value)
+        for difference in result.differences
+    ]
+    assert actual == [(DifferenceType.MODIFIED, "B5", 10, 20)]
+
+
+def test_key_column_compare_reports_added_and_deleted_keys() -> None:
+    old = ExcelDocument({"S": {"A2": CellData("001"), "B2": CellData("old")}})
+    new = ExcelDocument({"S": {"A3": CellData("002"), "B3": CellData("new")}})
+    result = ExcelComparer().compare(
+        old,
+        new,
+        CompareOptions(algorithm=CompareAlgorithm.KEY_COLUMNS, key_columns=("A",)),
+    )
+
+    assert [(difference.kind, difference.cell) for difference in result.differences] == [
+        (DifferenceType.ROW_DELETED, "2:2"),
+        (DifferenceType.ROW_ADDED, "3:3"),
+    ]
+
+
+def test_key_column_compare_rejects_duplicate_keys() -> None:
+    old = ExcelDocument({"S": {"A2": CellData("001"), "A3": CellData("001")}})
+    new = ExcelDocument({"S": {"A2": CellData("001")}})
+
+    with pytest.raises(InvalidInputError, match="重複"):
+        ExcelComparer().compare(
+            old,
+            new,
+            CompareOptions(algorithm=CompareAlgorithm.KEY_COLUMNS, key_columns=("A",)),
+        )
 
 
 def test_encrypted_workbook_signature_has_specific_error(tmp_path: Path) -> None:
