@@ -31,7 +31,7 @@ class CompareOptions:
     ignore_case: bool = False
     algorithm: CompareAlgorithm = CompareAlgorithm.CELL_COORDINATE
     key_columns: tuple[str, ...] = ()
-    csv_encoding: str = "utf-8-sig"
+    csv_encoding: str = "auto"
     csv_delimiter: str = ","
 
 

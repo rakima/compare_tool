@@ -165,6 +165,30 @@ def test_csv_key_column_compare_matches_moved_rows(tmp_path: Path) -> None:
     assert modified.new_value == "new"
 
 
+def test_csv_auto_encoding_detects_shift_jis(tmp_path: Path) -> None:
+    old = make_csv(
+        tmp_path / "old.csv",
+        [["id", "名前"], [1, "東京"]],
+        encoding="cp932",
+    )
+    new = make_csv(
+        tmp_path / "new.csv",
+        [["id", "名前"], [1, "大阪"]],
+        encoding="cp932",
+    )
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase().execute(old, new, output, CompareOptions())
+
+    assert result.count(DifferenceType.MODIFIED) == 1
+    workbook = load_workbook(output)
+    assert workbook["CSV"]["B2"].value == "大阪"
+    report = workbook["比較結果"]
+    assert report["D11"].value == "東京"
+    assert report["E11"].value == "大阪"
+    workbook.close()
+
+
 def test_csv_encoding_and_delimiter_options_are_used(tmp_path: Path) -> None:
     old = make_csv(
         tmp_path / "old.csv",

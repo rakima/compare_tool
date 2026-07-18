@@ -18,6 +18,7 @@ from .excel import CellData, ExcelComparer, ExcelDocument, ExcelReportWriter, ra
 from .models import CompareOptions, CompareResult
 
 CSV_SHEET_NAME = "CSV"
+CSV_AUTO_ENCODING = "auto"
 
 
 @dataclass(slots=True)
@@ -37,17 +38,40 @@ class CsvDocument:
 class CsvReader:
     def read(self, path: Path, options: CompareOptions | None = None) -> CsvDocument:
         options = options or CompareOptions()
+        encoding = self._resolve_encoding(path, options.csv_encoding)
         try:
-            with path.open("r", encoding=options.csv_encoding, newline="") as stream:
+            with path.open("r", encoding=encoding, newline="") as stream:
                 return CsvDocument([row for row in csv.reader(stream, delimiter=options.csv_delimiter)])
         except LookupError as exc:
             raise WorkbookReadError(f"CSVの文字コード指定が不正です: {options.csv_encoding}") from exc
         except UnicodeDecodeError as exc:
-            raise WorkbookReadError(f"CSVファイルを {options.csv_encoding} として読み取れません: {path}") from exc
+            raise WorkbookReadError(f"CSVファイルを {encoding} として読み取れません: {path}") from exc
         except OSError as exc:
             raise WorkbookReadError(f"CSVファイルを読み取れません: {path}") from exc
         except csv.Error as exc:
             raise WorkbookReadError(f"CSVファイルが読み取れません: {path}") from exc
+
+    def _resolve_encoding(self, path: Path, selected_encoding: str) -> str:
+        if selected_encoding != CSV_AUTO_ENCODING:
+            return selected_encoding
+        data = self._read_sample(path)
+        if data.startswith(b"\xef\xbb\xbf"):
+            return "utf-8-sig"
+        for encoding in ("utf-8", "cp932"):
+            try:
+                data.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+            return encoding
+        raise WorkbookReadError(f"CSVファイルの文字コードを自動判定できません: {path}")
+
+    @staticmethod
+    def _read_sample(path: Path) -> bytes:
+        try:
+            with path.open("rb") as stream:
+                return stream.read()
+        except OSError as exc:
+            raise WorkbookReadError(f"CSVファイルを読み取れません: {path}") from exc
 
 
 class CsvComparer(Comparer[CsvDocument]):

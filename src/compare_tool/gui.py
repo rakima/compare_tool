@@ -19,6 +19,7 @@ from .workbook_preparer import SUPPORTED_INPUT_EXTENSIONS
 
 GUI_INPUT_EXTENSIONS = SUPPORTED_INPUT_EXTENSIONS | {".csv"}
 CSV_ENCODINGS = {
+    "自動": "auto",
     "UTF-8 / UTF-8 BOM": "utf-8-sig",
     "Shift_JIS": "cp932",
 }
@@ -60,7 +61,7 @@ class CompareApp:
         self.ignore_case = tk.BooleanVar(value=False)
         self.algorithm = tk.StringVar(value=CompareAlgorithm.CELL_COORDINATE.value)
         self.key_columns = tk.StringVar()
-        self.csv_encoding = tk.StringVar(value="UTF-8 / UTF-8 BOM")
+        self.csv_encoding = tk.StringVar(value="自動")
         self.csv_delimiter = tk.StringVar(value="カンマ ,")
         self.view_mode = tk.StringVar(value="detail")
         self.status = tk.StringVar(value="ファイルを指定してください")
