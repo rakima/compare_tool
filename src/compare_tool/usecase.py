@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
-from .errors import InvalidInputError
+from .errors import InvalidInputError, OperationCancelledError
 from .excel import ExcelComparer, ExcelReader, ExcelReportWriter
 from .models import CompareOptions, CompareResult
+
+CancelCheck = Callable[[], bool]
 
 
 class CompareUseCase:
@@ -25,6 +28,7 @@ class CompareUseCase:
         output_path: str | Path,
         options: CompareOptions,
         detailed: bool = True,
+        cancel_requested: CancelCheck | None = None,
     ) -> CompareResult:
         old = self._validate(old_path, "旧ファイル")
         new = self._validate(new_path, "新ファイル")
@@ -36,8 +40,10 @@ class CompareUseCase:
         if self._same_file(new, output) or self._same_file(old, output):
             raise InvalidInputError("出力先には入力ファイルと異なるパスを指定してください。")
 
-        result = self.comparer.compare(self.reader.read(old), self.reader.read(new), options)
-        self.writer.write(new, output, result, detailed)
+        self._raise_if_cancelled(cancel_requested)
+        result = self.comparer.compare(self.reader.read(old), self.reader.read(new), options, cancel_requested)
+        self._raise_if_cancelled(cancel_requested)
+        self.writer.write(new, output, result, detailed, cancel_requested)
         return result
 
     @staticmethod
@@ -55,3 +61,8 @@ class CompareUseCase:
             return left.resolve().samefile(right.resolve())
         except (FileNotFoundError, OSError):
             return str(left.resolve()).casefold() == str(right.resolve()).casefold()
+
+    @staticmethod
+    def _raise_if_cancelled(cancel_requested: CancelCheck | None) -> None:
+        if cancel_requested is not None and cancel_requested():
+            raise OperationCancelledError("比較をキャンセルしました。")

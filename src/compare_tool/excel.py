@@ -14,8 +14,8 @@ from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.workbook.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from .comparer import Comparer
-from .errors import OutputWriteError, PasswordProtectedWorkbookError, WorkbookReadError
+from .comparer import CancelCheck, Comparer
+from .errors import OperationCancelledError, OutputWriteError, PasswordProtectedWorkbookError, WorkbookReadError
 from .models import CompareOptions, CompareResult, Difference, DifferenceType
 
 
@@ -81,18 +81,27 @@ class ExcelReader:
 
 
 class ExcelComparer(Comparer[ExcelDocument]):
-    def compare(self, old: ExcelDocument, new: ExcelDocument, options: CompareOptions) -> CompareResult:
+    def compare(
+        self,
+        old: ExcelDocument,
+        new: ExcelDocument,
+        options: CompareOptions,
+        cancel_requested: CancelCheck | None = None,
+    ) -> CompareResult:
         differences: list[Difference] = []
         old_names = set(old.sheets)
         new_names = set(new.sheets)
 
         for name in sorted(new_names - old_names):
+            self._raise_if_cancelled(cancel_requested)
             differences.append(Difference(DifferenceType.SHEET_ADDED, name))
         for name in sorted(old_names - new_names):
+            self._raise_if_cancelled(cancel_requested)
             differences.append(Difference(DifferenceType.SHEET_DELETED, name))
 
         for name in sorted(old_names & new_names):
-            differences.extend(self._compare_sheet(name, old.sheets[name], new.sheets[name], options))
+            self._raise_if_cancelled(cancel_requested)
+            differences.extend(self._compare_sheet(name, old.sheets[name], new.sheets[name], options, cancel_requested))
         return CompareResult(differences)
 
     def _compare_sheet(
@@ -101,9 +110,11 @@ class ExcelComparer(Comparer[ExcelDocument]):
         old_cells: dict[str, CellData],
         new_cells: dict[str, CellData],
         options: CompareOptions,
+        cancel_requested: CancelCheck | None,
     ) -> list[Difference]:
         result: list[Difference] = []
         for coordinate in sorted(set(old_cells) | set(new_cells)):
+            self._raise_if_cancelled(cancel_requested)
             old = old_cells.get(coordinate, CellData())
             new = new_cells.get(coordinate, CellData())
             value_changed = options.compare_values and not self._equal(old.value, new.value, options)
@@ -136,6 +147,11 @@ class ExcelComparer(Comparer[ExcelDocument]):
 
         return normalize(left) == normalize(right)
 
+    @staticmethod
+    def _raise_if_cancelled(cancel_requested: CancelCheck | None) -> None:
+        if cancel_requested is not None and cancel_requested():
+            raise OperationCancelledError("比較をキャンセルしました。")
+
 
 class ExcelReportWriter:
     REPORT_NAME = "比較結果"
@@ -143,10 +159,18 @@ class ExcelReportWriter:
     ADDED_FILL = PatternFill("solid", fgColor="C6EFCE")
     HEADER_FILL = PatternFill("solid", fgColor="D9EAF7")
 
-    def write(self, source_new: Path, output: Path, result: CompareResult, detailed: bool = True) -> Path:
+    def write(
+        self,
+        source_new: Path,
+        output: Path,
+        result: CompareResult,
+        detailed: bool = True,
+        cancel_requested: CancelCheck | None = None,
+    ) -> Path:
         workbook = None
         temporary_output: Path | None = None
         try:
+            self._raise_if_cancelled(cancel_requested)
             output.parent.mkdir(parents=True, exist_ok=True)
             file_descriptor, temporary_name = tempfile.mkstemp(
                 dir=output.parent,
@@ -159,8 +183,9 @@ class ExcelReportWriter:
             workbook = load_workbook(temporary_output)
             report_name = self._unique_report_name(workbook.sheetnames)
             report = workbook.create_sheet(report_name, 0)
-            self._write_report(report, result, detailed)
-            self._highlight_differences(workbook, result)
+            self._write_report(report, result, detailed, cancel_requested)
+            self._highlight_differences(workbook, result, cancel_requested)
+            self._raise_if_cancelled(cancel_requested)
             workbook.save(temporary_output)
             # Close before replacing because Windows does not allow replacing
             # a file that is still opened by openpyxl/zipfile.
@@ -179,7 +204,13 @@ class ExcelReportWriter:
                 with suppress(OSError):
                     temporary_output.unlink(missing_ok=True)
 
-    def _write_report(self, sheet: Worksheet, result: CompareResult, detailed: bool) -> None:
+    def _write_report(
+        self,
+        sheet: Worksheet,
+        result: CompareResult,
+        detailed: bool,
+        cancel_requested: CancelCheck | None = None,
+    ) -> None:
         sheet["A1"] = "比較サマリー"
         sheet["A1"].font = Font(bold=True, size=14)
         labels = [
@@ -205,6 +236,7 @@ class ExcelReportWriter:
             cell.fill = self.HEADER_FILL
             cell.alignment = self._default_alignment()
         for row, difference in enumerate(result.differences, header_row + 1):
+            self._raise_if_cancelled(cancel_requested)
             values = [
                 difference.kind.value,
                 difference.sheet,
@@ -246,9 +278,15 @@ class ExcelReportWriter:
         for column, width in widths.items():
             sheet.column_dimensions[column].width = width
 
-    def _highlight_differences(self, workbook: Workbook, result: CompareResult) -> None:
+    def _highlight_differences(
+        self,
+        workbook: Workbook,
+        result: CompareResult,
+        cancel_requested: CancelCheck | None = None,
+    ) -> None:
         sheet_names = set(workbook.sheetnames)
         for difference in result.differences:
+            self._raise_if_cancelled(cancel_requested)
             if not difference.cell or difference.sheet not in sheet_names:
                 continue
             if difference.kind is DifferenceType.MODIFIED:
@@ -263,3 +301,8 @@ class ExcelReportWriter:
         while f"{self.REPORT_NAME}_{index}" in names:
             index += 1
         return f"{self.REPORT_NAME}_{index}"
+
+    @staticmethod
+    def _raise_if_cancelled(cancel_requested: CancelCheck | None) -> None:
+        if cancel_requested is not None and cancel_requested():
+            raise OperationCancelledError("比較をキャンセルしました。")

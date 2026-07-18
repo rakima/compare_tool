@@ -16,3 +16,7 @@ class PasswordProtectedWorkbookError(WorkbookReadError):
 
 class OutputWriteError(CompareToolError):
     pass
+
+
+class OperationCancelledError(CompareToolError):
+    pass

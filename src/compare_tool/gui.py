@@ -9,7 +9,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any, cast
 
-from .errors import CompareToolError
+from .errors import CompareToolError, OperationCancelledError
 from .models import CompareOptions
 from .settings import AppSettingsStore
 from .usecase import CompareUseCase
@@ -35,6 +35,7 @@ class CompareApp:
         self.file_history = self.settings.load_file_history()
         self.last_output: Path | None = None
         self.is_busy = False
+        self.cancel_event: threading.Event | None = None
         self.busy_controls: list[ttk.Widget] = []
         self.old_path = tk.StringVar()
         self.new_path = tk.StringVar()
@@ -86,6 +87,8 @@ class CompareApp:
         actions.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(0, 10))
         self.compare_button = ttk.Button(actions, text="比較開始", command=self._start_compare)
         self.compare_button.pack(side="left")
+        self.cancel_button = ttk.Button(actions, text="キャンセル", command=self._cancel_compare, state="disabled")
+        self.cancel_button.pack(side="left", padx=(8, 0))
         self.open_button = ttk.Button(actions, text="出力ファイルを開く", command=self._open_output, state="disabled")
         self.open_button.pack(side="left", padx=(8, 0))
         ttk.Label(actions, textvariable=self.status).pack(side="left", padx=12)
@@ -152,6 +155,7 @@ class CompareApp:
         self.last_output = None
         self.open_button.configure(state="disabled")
         self._set_busy(True)
+        self.cancel_event = threading.Event()
         self.status.set("比較中...")
         self._log("比較を開始します。")
         args = (self.old_path.get(), self.new_path.get(), output, self._options(), self.view_mode.get() == "detail")
@@ -168,10 +172,13 @@ class CompareApp:
 
     def _run_compare(self, old: str, new: str, output: str, options: CompareOptions, detailed: bool) -> None:
         try:
-            result = self.use_case.execute(old, new, output, options, detailed)
+            cancel_requested = self.cancel_event.is_set if self.cancel_event is not None else None
+            result = self.use_case.execute(old, new, output, options, detailed, cancel_requested)
             summary = result.summary()
             detail = "、".join(f"{kind.value}: {count}" for kind, count in summary.items())
             self.root.after(0, partial(self._success, output, detail))
+        except OperationCancelledError:
+            self.root.after(0, self._cancelled)
         except CompareToolError as exc:
             self.root.after(0, partial(self._failure, str(exc)))
         except Exception as exc:
@@ -183,6 +190,7 @@ class CompareApp:
         self._remember_inputs()
         self.last_output = Path(output).resolve()
         self._set_busy(False)
+        self.cancel_event = None
         self.open_button.configure(state="normal")
         self.status.set("比較完了")
         self._log(f"比較完了: {detail}\n出力先: {output}")
@@ -190,14 +198,30 @@ class CompareApp:
 
     def _failure(self, message: str) -> None:
         self._set_busy(False)
+        self.cancel_event = None
         self.status.set("エラー")
         self._log(f"エラー: {message}")
         messagebox.showerror("エラー", message)
+
+    def _cancelled(self) -> None:
+        self._set_busy(False)
+        self.cancel_event = None
+        self.status.set("キャンセルしました")
+        self._log("比較をキャンセルしました。出力ファイルは作成していません。")
+
+    def _cancel_compare(self) -> None:
+        if self.cancel_event is None or self.cancel_event.is_set():
+            return
+        self.cancel_event.set()
+        self.cancel_button.configure(state="disabled")
+        self.status.set("キャンセル中...")
+        self._log("キャンセルを要求しました。処理中のステップが終わり次第停止します。")
 
     def _set_busy(self, busy: bool) -> None:
         self.is_busy = busy
         state = "disabled" if busy else "normal"
         self.compare_button.configure(state=state)
+        self.cancel_button.configure(state="normal" if busy else "disabled")
         for control in self.busy_controls:
             control.state(["disabled"] if busy else ["!disabled"])
         if busy:

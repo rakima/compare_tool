@@ -7,9 +7,9 @@ import pytest
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import PatternFill
 
-from compare_tool.errors import InvalidInputError, OutputWriteError, WorkbookReadError
+from compare_tool.errors import InvalidInputError, OperationCancelledError, OutputWriteError, WorkbookReadError
 from compare_tool.excel import ExcelReportWriter
-from compare_tool.models import CompareOptions, CompareResult, DifferenceType
+from compare_tool.models import CompareOptions, CompareResult, Difference, DifferenceType
 from compare_tool.usecase import CompareUseCase
 
 
@@ -87,7 +87,13 @@ def test_unusable_output_parent_is_reported_as_write_error(tmp_path: Path) -> No
 
 def test_existing_output_is_preserved_when_report_creation_fails(tmp_path: Path) -> None:
     class FailingWriter(ExcelReportWriter):
-        def _write_report(self, sheet: object, result: CompareResult, detailed: bool) -> None:
+        def _write_report(
+            self,
+            sheet: object,
+            result: CompareResult,
+            detailed: bool,
+            cancel_requested: object = None,
+        ) -> None:
             raise ValueError("simulated report failure")
 
     source = make_workbook(tmp_path / "new.xlsx", {"Data": {"A1": "new"}})
@@ -114,6 +120,36 @@ def test_successful_report_atomically_replaces_existing_output(tmp_path: Path) -
     assert workbook.sheetnames[0] == "比較結果"
     assert workbook["Data"]["A1"].value == "new"
     workbook.close()
+    assert list(tmp_path.glob(".existing_*.tmp.xlsx")) == []
+
+
+def test_cancelled_compare_does_not_create_output(tmp_path: Path) -> None:
+    old = make_workbook(tmp_path / "old.xlsx", {"Data": {"A1": "old"}})
+    new = make_workbook(tmp_path / "new.xlsx", {"Data": {"A1": "new"}})
+    output = tmp_path / "output.xlsx"
+
+    with pytest.raises(OperationCancelledError):
+        CompareUseCase().execute(old, new, output, CompareOptions(), cancel_requested=lambda: True)
+
+    assert not output.exists()
+
+
+def test_cancelled_report_preserves_existing_output(tmp_path: Path) -> None:
+    source = make_workbook(tmp_path / "new.xlsx", {"Data": {"A1": "new"}})
+    output = tmp_path / "existing.xlsx"
+    original_content = b"existing output must survive cancellation"
+    output.write_bytes(original_content)
+    result = CompareResult(
+        [
+            Difference(DifferenceType.MODIFIED, "Data", "A1", "old", "new"),
+            Difference(DifferenceType.ADDED, "Data", "B1", None, "added"),
+        ]
+    )
+
+    with pytest.raises(OperationCancelledError):
+        ExcelReportWriter().write(source, output, result, cancel_requested=lambda: True)
+
+    assert output.read_bytes() == original_content
     assert list(tmp_path.glob(".existing_*.tmp.xlsx")) == []
 
 
