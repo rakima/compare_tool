@@ -11,6 +11,7 @@ from zipfile import BadZipFile
 
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils.cell import coordinate_from_string
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.workbook.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
@@ -139,6 +140,126 @@ class CellCoordinateCompareAlgorithm(ExcelCompareAlgorithm):
         return normalize(left) == normalize(right)
 
 
+class RowLcsCompareAlgorithm(ExcelCompareAlgorithm):
+    def __init__(self, cell_algorithm: CellCoordinateCompareAlgorithm | None = None) -> None:
+        self.cell_algorithm = cell_algorithm or CellCoordinateCompareAlgorithm()
+
+    def compare_sheet(
+        self,
+        sheet: str,
+        old_cells: dict[str, CellData],
+        new_cells: dict[str, CellData],
+        options: CompareOptions,
+        cancel_requested: CancelCheck | None = None,
+    ) -> list[Difference]:
+        old_rows = self._rows(old_cells)
+        new_rows = self._rows(new_cells)
+        matches = self._lcs_matches(
+            [self._row_signature(old_cells, row, options) for row in old_rows],
+            [self._row_signature(new_cells, row, options) for row in new_rows],
+            cancel_requested,
+        )
+        result: list[Difference] = []
+        old_matched = {old_index for old_index, _ in matches}
+        new_matched = {new_index for _, new_index in matches}
+
+        for index, row in enumerate(old_rows):
+            raise_if_cancelled(cancel_requested)
+            if index not in old_matched:
+                result.append(Difference(DifferenceType.ROW_DELETED, sheet, f"{row}:{row}"))
+        for index, row in enumerate(new_rows):
+            raise_if_cancelled(cancel_requested)
+            if index not in new_matched:
+                result.append(Difference(DifferenceType.ROW_ADDED, sheet, f"{row}:{row}"))
+
+        for old_index, new_index in matches:
+            raise_if_cancelled(cancel_requested)
+            result.extend(
+                self.cell_algorithm.compare_sheet(
+                    sheet,
+                    self._row_cells_by_column(old_cells, old_rows[old_index], new_rows[new_index]),
+                    self._row_cells(new_cells, new_rows[new_index]),
+                    options,
+                    cancel_requested,
+                )
+            )
+        return sorted(result, key=lambda difference: (difference.sheet, difference.cell or "", difference.kind.value))
+
+    @staticmethod
+    def _rows(cells: dict[str, CellData]) -> list[int]:
+        return sorted({coordinate_from_string(coordinate)[1] for coordinate in cells})
+
+    @staticmethod
+    def _row_cells(cells: dict[str, CellData], row: int) -> dict[str, CellData]:
+        return {coordinate: data for coordinate, data in cells.items() if coordinate_from_string(coordinate)[1] == row}
+
+    @staticmethod
+    def _row_cells_by_column(cells: dict[str, CellData], source_row: int, target_row: int) -> dict[str, CellData]:
+        result: dict[str, CellData] = {}
+        for coordinate, data in cells.items():
+            column, row = coordinate_from_string(coordinate)
+            if row == source_row:
+                result[f"{column}{target_row}"] = data
+        return result
+
+    @staticmethod
+    def _row_signature(
+        cells: dict[str, CellData],
+        row: int,
+        options: CompareOptions,
+    ) -> tuple[tuple[str, object, object], ...]:
+        def normalize(value: object) -> object:
+            if options.empty_string_equals_empty and value == "":
+                value = None
+            if isinstance(value, str):
+                if options.ignore_surrounding_whitespace:
+                    value = value.strip()
+                if options.ignore_case:
+                    value = value.casefold()
+            return value
+
+        signature: list[tuple[str, object, object]] = []
+        for coordinate, data in cells.items():
+            column, current_row = coordinate_from_string(coordinate)
+            if current_row != row:
+                continue
+            value = normalize(data.value) if options.compare_values else None
+            formula = normalize(data.formula) if options.compare_formulas else None
+            if value is not None or formula is not None:
+                signature.append((column, value, formula))
+        return tuple(sorted(signature))
+
+    @staticmethod
+    def _lcs_matches(
+        old_signatures: list[tuple[tuple[str, object, object], ...]],
+        new_signatures: list[tuple[tuple[str, object, object], ...]],
+        cancel_requested: CancelCheck | None,
+    ) -> list[tuple[int, int]]:
+        table = [[0] * (len(new_signatures) + 1) for _ in range(len(old_signatures) + 1)]
+        for old_index, old_signature in enumerate(old_signatures, 1):
+            raise_if_cancelled(cancel_requested)
+            for new_index, new_signature in enumerate(new_signatures, 1):
+                if old_signature == new_signature:
+                    table[old_index][new_index] = table[old_index - 1][new_index - 1] + 1
+                else:
+                    table[old_index][new_index] = max(table[old_index - 1][new_index], table[old_index][new_index - 1])
+
+        matches: list[tuple[int, int]] = []
+        old_index = len(old_signatures)
+        new_index = len(new_signatures)
+        while old_index and new_index:
+            raise_if_cancelled(cancel_requested)
+            if old_signatures[old_index - 1] == new_signatures[new_index - 1]:
+                matches.append((old_index - 1, new_index - 1))
+                old_index -= 1
+                new_index -= 1
+            elif table[old_index - 1][new_index] >= table[old_index][new_index - 1]:
+                old_index -= 1
+            else:
+                new_index -= 1
+        return list(reversed(matches))
+
+
 def raise_if_cancelled(cancel_requested: CancelCheck | None) -> None:
     if cancel_requested is not None and cancel_requested():
         raise OperationCancelledError("比較をキャンセルしました。")
@@ -148,6 +269,7 @@ class ExcelComparer(Comparer[ExcelDocument]):
     def __init__(self, algorithms: dict[CompareAlgorithm, ExcelCompareAlgorithm] | None = None) -> None:
         self.algorithms = algorithms or {
             CompareAlgorithm.CELL_COORDINATE: CellCoordinateCompareAlgorithm(),
+            CompareAlgorithm.ROW_LCS: RowLcsCompareAlgorithm(),
         }
 
     def compare(
@@ -244,6 +366,8 @@ class ExcelReportWriter:
             (DifferenceType.MODIFIED, "変更件数"),
             (DifferenceType.ADDED, "追加件数"),
             (DifferenceType.DELETED, "削除件数"),
+            (DifferenceType.ROW_ADDED, "行追加件数"),
+            (DifferenceType.ROW_DELETED, "行削除件数"),
             (DifferenceType.SHEET_ADDED, "シート追加件数"),
             (DifferenceType.SHEET_DELETED, "シート削除件数"),
         ]
@@ -255,7 +379,7 @@ class ExcelReportWriter:
             self._finish_layout(sheet)
             return
 
-        header_row = 8
+        header_row = 10
         headers = ["種別", "シート", "セル", "旧値", "新値", "リンク"]
         for column, value in enumerate(headers, 1):
             cell = sheet.cell(header_row, column, value)

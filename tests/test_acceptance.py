@@ -9,7 +9,7 @@ from openpyxl.styles import PatternFill
 
 from compare_tool.errors import InvalidInputError, OperationCancelledError, OutputWriteError, WorkbookReadError
 from compare_tool.excel import ExcelReportWriter
-from compare_tool.models import CompareOptions, CompareResult, Difference, DifferenceType
+from compare_tool.models import CompareAlgorithm, CompareOptions, CompareResult, Difference, DifferenceType
 from compare_tool.settings import AppSettingsStore
 from compare_tool.usecase import CompareUseCase
 
@@ -184,7 +184,7 @@ def test_link_escapes_apostrophe_in_sheet_name(tmp_path: Path) -> None:
     sheet_name = "社長's Data"
     _, output = compare(tmp_path, {sheet_name: {"A1": "old"}}, {sheet_name: {"A1": "new"}})
     workbook = load_workbook(output)
-    assert workbook["比較結果"]["F9"].hyperlink.target == "#'社長''s Data'!A1"
+    assert workbook["比較結果"]["F11"].hyperlink.target == "#'社長''s Data'!A1"
     workbook.close()
 
 
@@ -194,7 +194,26 @@ def test_summary_mode_omits_detail_table_but_keeps_counts(tmp_path: Path) -> Non
     report = workbook["比較結果"]
     assert report["B2"].value == result.count(DifferenceType.MODIFIED) == 1
     assert report["B3"].value == result.count(DifferenceType.ADDED) == 1
-    assert report["A8"].value is None
+    assert report["A10"].value is None
+    workbook.close()
+
+
+def test_row_lcs_report_summarizes_inserted_row(tmp_path: Path) -> None:
+    result, output = compare(
+        tmp_path,
+        {"Data": {"A1": "A", "A2": "B", "A3": "C"}},
+        {"Data": {"A1": "A", "A2": "X", "A3": "B", "A4": "C"}},
+        options=CompareOptions(algorithm=CompareAlgorithm.ROW_LCS),
+    )
+
+    assert result.count(DifferenceType.ROW_ADDED) == 1
+    assert result.count(DifferenceType.MODIFIED) == 0
+    workbook = load_workbook(output)
+    report = workbook["比較結果"]
+    assert report["B5"].value == 1
+    assert report["A11"].value == "行追加"
+    assert report["C11"].value == "2:2"
+    assert report["F11"].value is None
     workbook.close()
 
 
@@ -250,8 +269,8 @@ def test_formula_text_change_is_reported_without_recalculation(tmp_path: Path) -
     assert difference.cell == "B1"
     assert difference.formula_changed is True
     workbook = load_workbook(output)
-    assert workbook["比較結果"]["D9"].value == "'=SUM(A1:A2)"
-    assert workbook["比較結果"]["E9"].value == "'=SUM(A1:A1)"
+    assert workbook["比較結果"]["D11"].value == "'=SUM(A1:A2)"
+    assert workbook["比較結果"]["E11"].value == "'=SUM(A1:A1)"
     workbook.close()
 
 
@@ -272,6 +291,6 @@ def test_sheet_addition_and_deletion_are_summarized(tmp_path: Path) -> None:
     assert result.count(DifferenceType.SHEET_DELETED) == 1
     workbook = load_workbook(output)
     report = workbook["比較結果"]
-    assert report["B5"].value == 1
-    assert report["B6"].value == 1
+    assert report["B7"].value == 1
+    assert report["B8"].value == 1
     workbook.close()

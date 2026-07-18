@@ -11,7 +11,7 @@ from typing import Any, cast
 
 from . import __version__
 from .errors import CompareToolError, OperationCancelledError
-from .models import CompareOptions
+from .models import CompareAlgorithm, CompareOptions
 from .settings import AppSettingsStore
 from .usecase import CompareUseCase
 
@@ -45,6 +45,7 @@ class CompareApp:
         self.empty_equals_empty = tk.BooleanVar(value=True)
         self.ignore_whitespace = tk.BooleanVar(value=False)
         self.ignore_case = tk.BooleanVar(value=False)
+        self.algorithm = tk.StringVar(value=CompareAlgorithm.CELL_COORDINATE.value)
         self.view_mode = tk.StringVar(value="detail")
         self.status = tk.StringVar(value="ファイルを指定してください")
         self._build()
@@ -91,6 +92,15 @@ class CompareApp:
         for column, text, value in [(1, "詳細表示", "detail"), (2, "サマリー表示", "summary")]:
             radio = ttk.Radiobutton(options, text=text, variable=self.view_mode, value=value)
             radio.grid(row=2, column=column, sticky="w", pady=(9, 0))
+            self.busy_controls.append(radio)
+        ttk.Label(options, text="比較方式:").grid(row=3, column=0, sticky="w", pady=(9, 0))
+        algorithms = [
+            ("セル座標比較", CompareAlgorithm.CELL_COORDINATE.value),
+            ("行追加/削除を考慮", CompareAlgorithm.ROW_LCS.value),
+        ]
+        for column, (text, value) in enumerate(algorithms, 1):
+            radio = ttk.Radiobutton(options, text=text, variable=self.algorithm, value=value)
+            radio.grid(row=3, column=column, sticky="w", pady=(9, 0))
             self.busy_controls.append(radio)
 
         actions = ttk.Frame(main)
@@ -214,6 +224,7 @@ class CompareApp:
             empty_string_equals_empty=self.empty_equals_empty.get(),
             ignore_surrounding_whitespace=self.ignore_whitespace.get(),
             ignore_case=self.ignore_case.get(),
+            algorithm=CompareAlgorithm(self.algorithm.get()),
         )
 
     def _run_compare(self, old: str, new: str, output: str, options: CompareOptions, detailed: bool) -> None:

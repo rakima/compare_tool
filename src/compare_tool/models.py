@@ -10,12 +10,15 @@ class DifferenceType(str, Enum):
     MODIFIED = "変更"
     ADDED = "追加"
     DELETED = "削除"
+    ROW_ADDED = "行追加"
+    ROW_DELETED = "行削除"
     SHEET_ADDED = "シート追加"
     SHEET_DELETED = "シート削除"
 
 
 class CompareAlgorithm(str, Enum):
     CELL_COORDINATE = "cell_coordinate"
+    ROW_LCS = "row_lcs"
 
 
 @dataclass(frozen=True, slots=True)

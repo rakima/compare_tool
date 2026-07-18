@@ -107,7 +107,7 @@ def test_summary_report_with_10k_differences_omits_detail_rows(tmp_path: Path) -
     try:
         report = workbook["比較結果"]
         assert report["B2"].value == 10_000
-        assert report["A8"].value is None
+        assert report["A10"].value is None
     finally:
         workbook.close()
     assert result.count(DifferenceType.MODIFIED) == 10_000

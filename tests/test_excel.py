@@ -57,6 +57,26 @@ def test_excel_comparer_uses_selected_algorithm() -> None:
     ]
 
 
+def test_row_lcs_detects_inserted_row_without_shifting_following_rows() -> None:
+    old = ExcelDocument({"S": {"A1": CellData("A"), "A2": CellData("B"), "A3": CellData("C")}})
+    new = ExcelDocument({"S": {"A1": CellData("A"), "A2": CellData("X"), "A3": CellData("B"), "A4": CellData("C")}})
+    result = ExcelComparer().compare(old, new, CompareOptions(algorithm=CompareAlgorithm.ROW_LCS))
+
+    assert [(difference.kind, difference.cell) for difference in result.differences] == [
+        (DifferenceType.ROW_ADDED, "2:2")
+    ]
+
+
+def test_row_lcs_detects_deleted_row_without_shifting_following_rows() -> None:
+    old = ExcelDocument({"S": {"A1": CellData("A"), "A2": CellData("B"), "A3": CellData("C")}})
+    new = ExcelDocument({"S": {"A1": CellData("A"), "A2": CellData("C")}})
+    result = ExcelComparer().compare(old, new, CompareOptions(algorithm=CompareAlgorithm.ROW_LCS))
+
+    assert [(difference.kind, difference.cell) for difference in result.differences] == [
+        (DifferenceType.ROW_DELETED, "2:2")
+    ]
+
+
 def test_encrypted_workbook_signature_has_specific_error(tmp_path: Path) -> None:
     encrypted = tmp_path / "encrypted.xlsx"
     encrypted.write_bytes(bytes.fromhex("D0CF11E0A1B11AE1") + b"encrypted")
@@ -82,7 +102,7 @@ def test_use_case_writes_report_and_highlights(tmp_path: Path) -> None:
     assert result.count(DifferenceType.ADDED) == 1
     book = load_workbook(output)
     assert book.sheetnames[0] == "比較結果"
-    assert book["比較結果"]["F9"].hyperlink.target == "#'Data'!A1"
+    assert book["比較結果"]["F11"].hyperlink.target == "#'Data'!A1"
     assert book["Data"]["A1"].fill.fgColor.rgb.endswith("FFF2CC")
     assert book["Data"]["B1"].fill.fgColor.rgb.endswith("C6EFCE")
     book.close()
