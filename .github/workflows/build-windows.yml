@@ -31,12 +31,19 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
 
+      - name: Get package version
+        id: version
+        shell: pwsh
+        run: |
+          $version = python -c "from importlib.metadata import version; print(version('compare-tool'))"
+          "version=$version" >> $env:GITHUB_OUTPUT
+
       - name: Build executable
         run: python -m PyInstaller compare_tool.spec --noconfirm --clean
 
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
-          name: compare_tool-windows
+          name: compare_tool-v${{ steps.version.outputs.version }}-windows
           path: dist/compare_tool.exe
           if-no-files-found: error

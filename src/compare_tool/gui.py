@@ -9,6 +9,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any, cast
 
+from . import __version__
 from .errors import CompareToolError, OperationCancelledError
 from .models import CompareOptions
 from .settings import AppSettingsStore
@@ -49,7 +50,7 @@ class CompareApp:
         self._build()
 
     def _build(self) -> None:
-        self.root.title("compare_tool - Excel差分比較")
+        self.root.title(f"compare_tool v{__version__} - Excel差分比較")
         self.root.geometry("920x650")
         self.root.minsize(760, 560)
 
@@ -58,9 +59,11 @@ class CompareApp:
         main.columnconfigure(1, weight=1)
         main.rowconfigure(5, weight=1)
 
-        ttk.Label(main, text="Excel差分比較", font=("Yu Gothic UI", 16, "bold")).grid(
-            row=0, column=0, columnspan=3, sticky="w", pady=(0, 12)
-        )
+        header = ttk.Frame(main)
+        header.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 12))
+        header.columnconfigure(0, weight=1)
+        ttk.Label(header, text="Excel差分比較", font=("Yu Gothic UI", 16, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text=f"v{__version__}").grid(row=0, column=1, sticky="e")
         self.old_entry = self._file_row(main, 1, "旧ファイル", self.old_path)
         self.new_entry = self._file_row(main, 2, "新ファイル", self.new_path)
 
