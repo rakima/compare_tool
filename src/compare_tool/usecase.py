@@ -6,6 +6,7 @@ from pathlib import Path
 from .errors import InvalidInputError, OperationCancelledError
 from .excel import ExcelComparer, ExcelReader, ExcelReportWriter
 from .models import CompareOptions, CompareResult
+from .workbook_preparer import SUPPORTED_INPUT_EXTENSIONS, WorkbookPreparer
 
 CancelCheck = Callable[[], bool]
 ProgressCallback = Callable[[str], None]
@@ -18,10 +19,12 @@ class CompareUseCase:
         reader: ExcelReader | None = None,
         comparer: ExcelComparer | None = None,
         writer: ExcelReportWriter | None = None,
+        workbook_preparer: WorkbookPreparer | None = None,
     ) -> None:
         self.reader = reader or ExcelReader()
         self.comparer = comparer or ExcelComparer()
         self.writer = writer or ExcelReportWriter()
+        self.workbook_preparer = workbook_preparer or WorkbookPreparer()
 
     def execute(
         self,
@@ -44,11 +47,15 @@ class CompareUseCase:
             raise InvalidInputError("出力先には入力ファイルと異なるパスを指定してください。")
 
         self._raise_if_cancelled(cancel_requested)
+        self._notify(progress_callback, "入力ファイルを準備しています...")
+        prepared_old = self.workbook_preparer.prepare(old)
+        prepared_new = self.workbook_preparer.prepare(new)
+        self._raise_if_cancelled(cancel_requested)
         self._notify(progress_callback, "旧ファイルを読み込んでいます...")
-        old_document = self.reader.read(old)
+        old_document = self.reader.read(prepared_old.prepared_path)
         self._raise_if_cancelled(cancel_requested)
         self._notify(progress_callback, "新ファイルを読み込んでいます...")
-        new_document = self.reader.read(new)
+        new_document = self.reader.read(prepared_new.prepared_path)
         self._raise_if_cancelled(cancel_requested)
         self._notify(progress_callback, "差分を検出しています...")
         result = self.comparer.compare(old_document, new_document, options, cancel_requested)
@@ -57,15 +64,15 @@ class CompareUseCase:
         if detailed and result.total >= LARGE_DIFFERENCE_NOTICE_THRESHOLD:
             self._notify(progress_callback, "差分が多いため、詳細レポートの作成に時間がかかる場合があります。")
         self._notify(progress_callback, "比較結果Excelを作成しています...")
-        self.writer.write(new, output, result, detailed, cancel_requested)
+        self.writer.write(prepared_new.prepared_path, output, result, detailed, cancel_requested)
         self._notify(progress_callback, "比較結果Excelの作成が完了しました。")
         return result
 
     @staticmethod
     def _validate(path_value: str | Path, label: str) -> Path:
         path = Path(path_value).expanduser()
-        if path.suffix.lower() != ".xlsx":
-            raise InvalidInputError(f"{label}は .xlsx ファイルを指定してください。")
+        if path.suffix.lower() not in SUPPORTED_INPUT_EXTENSIONS:
+            raise InvalidInputError(f"{label}は .xlsx または .xls ファイルを指定してください。")
         if not path.is_file():
             raise InvalidInputError(f"{label}が見つかりません: {path}")
         return path

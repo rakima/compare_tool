@@ -10,6 +10,10 @@ class WorkbookReadError(CompareToolError):
     pass
 
 
+class WorkbookConversionError(CompareToolError):
+    pass
+
+
 class PasswordProtectedWorkbookError(WorkbookReadError):
     pass
 

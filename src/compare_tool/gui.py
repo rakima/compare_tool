@@ -15,6 +15,7 @@ from .errors import CompareToolError, OperationCancelledError
 from .models import CompareAlgorithm, CompareOptions
 from .settings import AppSettingsStore
 from .usecase import CompareUseCase
+from .workbook_preparer import SUPPORTED_INPUT_EXTENSIONS
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -154,7 +155,10 @@ class CompareApp:
         return entry
 
     def _browse(self, variable: tk.StringVar) -> None:
-        selected = filedialog.askopenfilename(title="Excelファイルを選択", filetypes=[("Excel", "*.xlsx")])
+        selected = filedialog.askopenfilename(
+            title="Excelファイルを選択",
+            filetypes=[("Excel", "*.xlsx *.xls"), ("Excel 2007以降", "*.xlsx"), ("Excel 97-2003", "*.xls")],
+        )
         if selected:
             variable.set(selected)
 
@@ -165,8 +169,8 @@ class CompareApp:
         if not paths:
             return
         path = Path(paths[0])
-        if path.suffix.lower() != ".xlsx":
-            messagebox.showwarning("対象外ファイル", ".xlsx ファイルのみ指定できます。")
+        if path.suffix.lower() not in SUPPORTED_INPUT_EXTENSIONS:
+            messagebox.showwarning("対象外ファイル", ".xlsx または .xls ファイルのみ指定できます。")
             self._log(f"対象外ファイルを拒否しました: {path}")
             return
         variable.set(str(path))
@@ -213,8 +217,8 @@ class CompareApp:
 
         for label, value in [("旧ファイル", old_value), ("新ファイル", new_value)]:
             path = Path(value)
-            if path.suffix.lower() != ".xlsx":
-                messagebox.showwarning("対象外ファイル", f"{label}は .xlsx ファイルを指定してください。")
+            if path.suffix.lower() not in SUPPORTED_INPUT_EXTENSIONS:
+                messagebox.showwarning("対象外ファイル", f"{label}は .xlsx または .xls ファイルを指定してください。")
                 self.status.set("対象外ファイル")
                 self._log(f"{label}の対象外ファイルを拒否しました: {path}")
                 return False

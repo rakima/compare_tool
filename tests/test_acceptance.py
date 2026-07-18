@@ -7,11 +7,18 @@ import pytest
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import PatternFill
 
-from compare_tool.errors import InvalidInputError, OperationCancelledError, OutputWriteError, WorkbookReadError
+from compare_tool.errors import (
+    InvalidInputError,
+    OperationCancelledError,
+    OutputWriteError,
+    WorkbookConversionError,
+    WorkbookReadError,
+)
 from compare_tool.excel import ExcelReportWriter
 from compare_tool.models import CompareAlgorithm, CompareOptions, CompareResult, Difference, DifferenceType
 from compare_tool.settings import AppSettingsStore
 from compare_tool.usecase import CompareUseCase
+from compare_tool.workbook_preparer import PreparedWorkbook, WorkbookPreparer
 
 
 def make_workbook(path: Path, sheets: Mapping[str, Mapping[str, object]]) -> Path:
@@ -47,13 +54,52 @@ def test_same_input_file_is_rejected(tmp_path: Path) -> None:
         CompareUseCase().execute(source, source, tmp_path / "output.xlsx", CompareOptions())
 
 
-@pytest.mark.parametrize("bad_name", ["input.xls", "input.xlsm", "input.csv"])
+@pytest.mark.parametrize("bad_name", ["input.xlsm", "input.csv"])
 def test_unsupported_input_extension_is_rejected(tmp_path: Path, bad_name: str) -> None:
     bad = tmp_path / bad_name
     bad.write_bytes(b"not used")
     new = make_workbook(tmp_path / "new.xlsx", {"Data": {}})
-    with pytest.raises(InvalidInputError, match=r"\.xlsx"):
+    with pytest.raises(InvalidInputError, match=r"\.xlsx または \.xls"):
         CompareUseCase().execute(bad, new, tmp_path / "output.xlsx", CompareOptions())
+
+
+def test_xls_input_reaches_conversion_layer(tmp_path: Path) -> None:
+    old = tmp_path / "old.xls"
+    old.write_bytes(b"legacy workbook placeholder")
+    new = make_workbook(tmp_path / "new.xlsx", {"Data": {}})
+
+    with pytest.raises(WorkbookConversionError, match=r"\.xls ファイルの変換機能"):
+        CompareUseCase().execute(old, new, tmp_path / "output.xlsx", CompareOptions())
+
+
+def test_xls_input_can_be_prepared_by_injected_converter(tmp_path: Path) -> None:
+    class FakeWorkbookPreparer(WorkbookPreparer):
+        def __init__(self, converted_old: Path) -> None:
+            self.converted_old = converted_old
+
+        def prepare(self, path: Path) -> PreparedWorkbook:
+            if path.suffix.lower() == ".xls":
+                return PreparedWorkbook(path, self.converted_old, converted=True)
+            return super().prepare(path)
+
+    old_xls = tmp_path / "old.xls"
+    old_xls.write_bytes(b"legacy workbook placeholder")
+    converted_old = make_workbook(tmp_path / "converted_old.xlsx", {"Data": {"A1": "old"}})
+    new = make_workbook(tmp_path / "new.xlsx", {"Data": {"A1": "new"}})
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase(workbook_preparer=FakeWorkbookPreparer(converted_old)).execute(
+        old_xls,
+        new,
+        output,
+        CompareOptions(),
+    )
+
+    assert result.count(DifferenceType.MODIFIED) == 1
+    workbook = load_workbook(output)
+    assert workbook["比較結果"]["D11"].value == "old"
+    assert workbook["比較結果"]["E11"].value == "new"
+    workbook.close()
 
 
 def test_missing_input_file_is_rejected(tmp_path: Path) -> None:
