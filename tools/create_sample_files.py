@@ -1,5 +1,6 @@
-"""Create a pair of workbooks for manually checking compare_tool."""
+"""Create sample files for manually checking compare_tool."""
 
+import csv
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -70,11 +71,36 @@ def create_workbook(path: Path, *, new: bool) -> None:
     workbook.close()
 
 
+def create_csv(path: Path, *, new: bool, encoding: str = "utf-8-sig", delimiter: str = ",") -> None:
+    rows = (
+        [
+            ["商品ID", "商品名", "単価", "数量", "備考"],
+            ["P001", "ノートPC", "120000" if new else "100000", "2", "価格変更" if new else ""],
+            ["P002", "マウス", "2500", "10" if new else "8", "数量変更"],
+            ["P004", "Webカメラ", "8500", "4", "追加行"],
+        ]
+        if new
+        else [
+            ["商品ID", "商品名", "単価", "数量", "備考"],
+            ["P001", "ノートPC", "100000", "2", ""],
+            ["P002", "マウス", "2500", "8", "数量変更"],
+            ["P003", "キーボード", "6000", "5", "削除行"],
+        ]
+    )
+    with path.open("w", encoding=encoding, newline="") as stream:
+        writer = csv.writer(stream, delimiter=delimiter)
+        writer.writerows(rows)
+
+
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     create_workbook(OUTPUT_DIR / "比較サンプル_旧.xlsx", new=False)
     create_workbook(OUTPUT_DIR / "比較サンプル_新.xlsx", new=True)
-    print(f"Created sample workbooks in {OUTPUT_DIR}")
+    create_csv(OUTPUT_DIR / "比較サンプル_旧.csv", new=False)
+    create_csv(OUTPUT_DIR / "比較サンプル_新.csv", new=True)
+    create_csv(OUTPUT_DIR / "比較サンプル_ShiftJIS_Tab_旧.csv", new=False, encoding="cp932", delimiter="\t")
+    create_csv(OUTPUT_DIR / "比較サンプル_ShiftJIS_Tab_新.csv", new=True, encoding="cp932", delimiter="\t")
+    print(f"Created sample files in {OUTPUT_DIR}")
 
 
 if __name__ == "__main__":

@@ -84,6 +84,12 @@ python -m mypy
 python -m pytest -q
 ```
 
+手動確認用のExcel/CSVサンプルは次のコマンドで `samples` フォルダに作成できます。
+
+```powershell
+python tools\create_sample_files.py
+```
+
 同じ品質チェックはGitHub ActionsでもPython 3.10／3.12（Windows）に対して自動実行されます。
 
 大容量・疎なExcelの性能回帰テストは、通常テストと分けて次のコマンドで実行できます。
