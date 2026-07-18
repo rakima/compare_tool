@@ -221,6 +221,24 @@ def test_csv_encoding_and_delimiter_options_are_used(tmp_path: Path) -> None:
     workbook.close()
 
 
+def test_csv_auto_delimiter_detects_tab_and_semicolon(tmp_path: Path) -> None:
+    tab_old = make_csv(tmp_path / "tab_old.csv", [["id", "value"], [1, "old"]], delimiter="\t")
+    tab_new = make_csv(tmp_path / "tab_new.csv", [["id", "value"], [1, "new"]], delimiter="\t")
+    semicolon_old = make_csv(tmp_path / "semicolon_old.csv", [["id", "value"], [1, "old"]], delimiter=";")
+    semicolon_new = make_csv(tmp_path / "semicolon_new.csv", [["id", "value"], [1, "new"]], delimiter=";")
+
+    tab_result = CompareUseCase().execute(tab_old, tab_new, tmp_path / "tab_output.xlsx", CompareOptions())
+    semicolon_result = CompareUseCase().execute(
+        semicolon_old,
+        semicolon_new,
+        tmp_path / "semicolon_output.xlsx",
+        CompareOptions(),
+    )
+
+    assert tab_result.count(DifferenceType.MODIFIED) == 1
+    assert semicolon_result.count(DifferenceType.MODIFIED) == 1
+
+
 def test_invalid_csv_delimiter_is_rejected(tmp_path: Path) -> None:
     old = make_csv(tmp_path / "old.csv", [["id", "value"]])
     new = make_csv(tmp_path / "new.csv", [["id", "value"]])

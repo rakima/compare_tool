@@ -131,6 +131,8 @@ class CompareUseCase:
 
     @staticmethod
     def _validate_csv_options(options: CompareOptions) -> None:
+        if options.csv_delimiter == "auto":
+            return
         if len(options.csv_delimiter) != 1:
             raise InvalidInputError(
                 "CSV区切り文字は1文字で指定してください。画面では「カンマ」「タブ」「セミコロン」から選択できます。"

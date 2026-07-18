@@ -24,6 +24,7 @@ CSV_ENCODINGS = {
     "Shift_JIS": "cp932",
 }
 CSV_DELIMITERS = {
+    "自動": "auto",
     "カンマ ,": ",",
     "タブ": "\t",
     "セミコロン ;": ";",
@@ -373,7 +374,7 @@ class CompareApp:
         for label, delimiter in CSV_DELIMITERS.items():
             if delimiter == value:
                 return label
-        return "カンマ ,"
+        return "自動"
 
     def _key_columns(self) -> tuple[str, ...]:
         columns: list[str] = []

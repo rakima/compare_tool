@@ -19,6 +19,8 @@ from .models import CompareOptions, CompareResult
 
 CSV_SHEET_NAME = "CSV"
 CSV_AUTO_ENCODING = "auto"
+CSV_AUTO_DELIMITER = "auto"
+CSV_DELIMITER_CANDIDATES = (",", "\t", ";")
 
 
 @dataclass(slots=True)
@@ -39,9 +41,10 @@ class CsvReader:
     def read(self, path: Path, options: CompareOptions | None = None) -> CsvDocument:
         options = options or CompareOptions()
         encoding = self._resolve_encoding(path, options.csv_encoding)
+        delimiter = self._resolve_delimiter(path, encoding, options.csv_delimiter)
         try:
             with path.open("r", encoding=encoding, newline="") as stream:
-                return CsvDocument([row for row in csv.reader(stream, delimiter=options.csv_delimiter)])
+                return CsvDocument([row for row in csv.reader(stream, delimiter=delimiter)])
         except LookupError as exc:
             raise WorkbookReadError(
                 f"CSVの文字コード指定が不正です: {options.csv_encoding}\n"
@@ -94,6 +97,51 @@ class CsvReader:
             "対応している自動判定候補はUTF-8 / UTF-8 BOM / Shift_JISです。"
             "別の文字コードのCSVはUTF-8またはShift_JISで保存し直してください。"
         )
+
+    def _resolve_delimiter(self, path: Path, encoding: str, selected_delimiter: str) -> str:
+        if selected_delimiter != CSV_AUTO_DELIMITER:
+            return selected_delimiter
+        rows = self._read_rows_for_detection(path, encoding)
+        scores = [(self._delimiter_score(rows, delimiter), delimiter) for delimiter in CSV_DELIMITER_CANDIDATES]
+        best_score, best_delimiter = max(scores, key=lambda item: item[0])
+        return "," if best_score <= 0 else best_delimiter
+
+    @staticmethod
+    def _delimiter_score(lines: list[str], delimiter: str) -> float:
+        parsed_rows = list(csv.reader(lines, delimiter=delimiter))
+        column_counts = [len(row) for row in parsed_rows if row]
+        if not column_counts:
+            return 0
+        max_columns = max(column_counts)
+        if max_columns <= 1:
+            return 0
+        most_common_columns = max(set(column_counts), key=column_counts.count)
+        consistency = column_counts.count(most_common_columns) / len(column_counts)
+        average_columns = sum(column_counts) / len(column_counts)
+        return consistency * 100 + average_columns * 10
+
+    @staticmethod
+    def _read_rows_for_detection(path: Path, encoding: str, limit: int = 20) -> list[str]:
+        try:
+            with path.open("r", encoding=encoding, newline="") as stream:
+                rows: list[str] = []
+                for _ in range(limit):
+                    line = stream.readline()
+                    if line == "":
+                        break
+                    rows.append(line)
+                return rows
+        except UnicodeDecodeError as exc:
+            raise WorkbookReadError(
+                f"CSVファイルを {encoding} として読み取れません: {path}\n"
+                "CSV文字コードの指定が実際のファイルと異なる可能性があります。"
+                "「自動」で失敗する場合は「UTF-8 / UTF-8 BOM」または「Shift_JIS」を選び直してください。"
+            ) from exc
+        except OSError as exc:
+            raise WorkbookReadError(
+                f"CSVファイルを読み取れません: {path}\n"
+                "ファイルが存在するか、他のアプリで使用中ではないか、読み取り権限があるか確認してください。"
+            ) from exc
 
     @staticmethod
     def _read_sample(path: Path) -> bytes:

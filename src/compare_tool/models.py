@@ -32,7 +32,7 @@ class CompareOptions:
     algorithm: CompareAlgorithm = CompareAlgorithm.CELL_COORDINATE
     key_columns: tuple[str, ...] = ()
     csv_encoding: str = "auto"
-    csv_delimiter: str = ","
+    csv_delimiter: str = "auto"
 
 
 @dataclass(frozen=True, slots=True)
