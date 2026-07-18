@@ -68,6 +68,7 @@ class CompareApp:
         self.key_columns = tk.StringVar(value=",".join(saved_options.key_columns))
         self.csv_encoding = tk.StringVar(value=self._csv_encoding_label(saved_options.csv_encoding))
         self.csv_delimiter = tk.StringVar(value=self._csv_delimiter_label(saved_options.csv_delimiter))
+        self.ignore_csv_blank_lines = tk.BooleanVar(value=saved_options.ignore_csv_blank_lines)
         self.view_mode = tk.StringVar(value=saved_view_mode)
         self.status = tk.StringVar(value="ファイルを指定してください")
         self._build()
@@ -157,6 +158,10 @@ class CompareApp:
         delimiter_combo.grid(row=5, column=3, sticky="w", pady=(9, 0))
         self.busy_controls.append(delimiter_combo)
         self.csv_only_controls.append(delimiter_combo)
+        blank_line_check = ttk.Checkbutton(options, text="CSV空行を無視", variable=self.ignore_csv_blank_lines)
+        blank_line_check.grid(row=6, column=0, sticky="w", pady=(9, 0))
+        self.busy_controls.append(blank_line_check)
+        self.csv_only_controls.append(blank_line_check)
 
         actions = ttk.Frame(main)
         actions.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(0, 10))
@@ -360,6 +365,7 @@ class CompareApp:
             key_columns=self._key_columns(),
             csv_encoding=CSV_ENCODINGS[self.csv_encoding.get()],
             csv_delimiter=CSV_DELIMITERS[self.csv_delimiter.get()],
+            ignore_csv_blank_lines=self.ignore_csv_blank_lines.get(),
         )
 
     @staticmethod

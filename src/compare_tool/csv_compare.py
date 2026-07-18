@@ -44,7 +44,12 @@ class CsvReader:
         delimiter = self._resolve_delimiter(path, encoding, options.csv_delimiter)
         try:
             with path.open("r", encoding=encoding, newline="") as stream:
-                return CsvDocument([row for row in csv.reader(stream, delimiter=delimiter)])
+                rows = [
+                    row
+                    for row in csv.reader(stream, delimiter=delimiter)
+                    if not (options.ignore_csv_blank_lines and self._is_blank_row(row))
+                ]
+                return CsvDocument(rows)
         except LookupError as exc:
             raise WorkbookReadError(
                 f"CSVの文字コード指定が不正です: {options.csv_encoding}\n"
@@ -89,6 +94,10 @@ class CsvReader:
     @staticmethod
     def _looks_like_text(text: str) -> bool:
         return not any((ord(character) < 32 and character not in "\r\n\t") for character in text)
+
+    @staticmethod
+    def _is_blank_row(row: list[str]) -> bool:
+        return all(value == "" for value in row)
 
     @staticmethod
     def _auto_detection_error(path: Path) -> WorkbookReadError:

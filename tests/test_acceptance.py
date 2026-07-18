@@ -239,6 +239,29 @@ def test_csv_auto_delimiter_detects_tab_and_semicolon(tmp_path: Path) -> None:
     assert semicolon_result.count(DifferenceType.MODIFIED) == 1
 
 
+def test_csv_blank_lines_are_ignored_by_default(tmp_path: Path) -> None:
+    old = make_csv(tmp_path / "old.csv", [["id", "value"], [], [1, "same"]])
+    new = make_csv(tmp_path / "new.csv", [["id", "value"], [1, "same"], []])
+
+    result = CompareUseCase().execute(old, new, tmp_path / "output.xlsx", CompareOptions())
+
+    assert result.total == 0
+
+
+def test_csv_blank_lines_can_be_compared(tmp_path: Path) -> None:
+    old = make_csv(tmp_path / "old.csv", [["id", "value"], [1, "same"]])
+    new = make_csv(tmp_path / "new.csv", [["id", "value"], [], [1, "same"]])
+
+    result = CompareUseCase().execute(
+        old,
+        new,
+        tmp_path / "output.xlsx",
+        CompareOptions(ignore_csv_blank_lines=False),
+    )
+
+    assert result.total > 0
+
+
 def test_invalid_csv_delimiter_is_rejected(tmp_path: Path) -> None:
     old = make_csv(tmp_path / "old.csv", [["id", "value"]])
     new = make_csv(tmp_path / "new.csv", [["id", "value"]])
@@ -342,6 +365,7 @@ def test_compare_options_and_view_mode_are_persisted(tmp_path: Path) -> None:
         key_columns=("A", "C"),
         csv_encoding="cp932",
         csv_delimiter="\t",
+        ignore_csv_blank_lines=False,
     )
 
     settings.save_compare_options(options)

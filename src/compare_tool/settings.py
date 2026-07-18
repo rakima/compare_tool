@@ -84,6 +84,10 @@ class AppSettingsStore:
             key_columns=self._key_columns(raw.get("key_columns")),
             csv_encoding=self._string(raw.get("csv_encoding"), defaults.csv_encoding),
             csv_delimiter=self._string(raw.get("csv_delimiter"), defaults.csv_delimiter),
+            ignore_csv_blank_lines=self._bool(
+                raw.get("ignore_csv_blank_lines"),
+                defaults.ignore_csv_blank_lines,
+            ),
         )
 
     def save_compare_options(self, options: CompareOptions) -> None:
@@ -98,6 +102,7 @@ class AppSettingsStore:
             "key_columns": list(options.key_columns),
             "csv_encoding": options.csv_encoding,
             "csv_delimiter": options.csv_delimiter,
+            "ignore_csv_blank_lines": options.ignore_csv_blank_lines,
         }
         self._write(data)
 

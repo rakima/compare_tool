@@ -33,6 +33,7 @@ class CompareOptions:
     key_columns: tuple[str, ...] = ()
     csv_encoding: str = "auto"
     csv_delimiter: str = "auto"
+    ignore_csv_blank_lines: bool = True
 
 
 @dataclass(frozen=True, slots=True)
