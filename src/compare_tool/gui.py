@@ -111,22 +111,22 @@ class CompareApp:
 
         actions = ttk.Frame(main)
         actions.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(0, 10))
+        actions.columnconfigure(5, weight=1)
         self.compare_button = ttk.Button(actions, text="比較開始", command=self._start_compare)
-        self.compare_button.pack(side="left")
+        self.compare_button.grid(row=0, column=0, sticky="w")
         self.cancel_button = ttk.Button(actions, text="キャンセル", command=self._cancel_compare, state="disabled")
-        self.cancel_button.pack(side="left", padx=(8, 0))
+        self.cancel_button.grid(row=0, column=1, sticky="w", padx=(8, 0))
         self.open_button = ttk.Button(actions, text="出力ファイルを開く", command=self._open_output, state="disabled")
-        self.open_button.pack(side="left", padx=(8, 0))
+        self.open_button.grid(row=0, column=2, sticky="w", padx=(8, 0))
         self.open_folder_button = ttk.Button(
             actions,
             text="保存フォルダを開く",
             command=self._open_output_folder,
             state="disabled",
         )
-        self.open_folder_button.pack(side="left", padx=(8, 0))
-        ttk.Label(actions, textvariable=self.status).pack(side="left", padx=12)
-        self.progress = ttk.Progressbar(actions, mode="indeterminate", length=130)
-        self.progress.pack(side="right")
+        self.open_folder_button.grid(row=0, column=3, sticky="w", padx=(8, 0))
+        ttk.Label(actions, text="状態:").grid(row=0, column=4, sticky="w", padx=(14, 4))
+        ttk.Label(actions, textvariable=self.status).grid(row=0, column=5, sticky="ew")
 
         log_frame = ttk.LabelFrame(main, text="ログ", padding=6)
         log_frame.grid(row=6, column=0, columnspan=3, sticky="nsew")
@@ -315,10 +315,6 @@ class CompareApp:
         self.cancel_button.configure(state="normal" if busy else "disabled")
         for control in self.busy_controls:
             control.state(["disabled"] if busy else ["!disabled"])
-        if busy:
-            self.progress.start(12)
-        else:
-            self.progress.stop()
 
     def _remember_inputs(self) -> None:
         current = [self.old_path.get(), self.new_path.get()]
