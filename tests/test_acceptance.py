@@ -33,6 +33,11 @@ def make_workbook(path: Path, sheets: Mapping[str, Mapping[str, object]]) -> Pat
     return path
 
 
+def make_csv(path: Path, rows: list[list[object]]) -> Path:
+    path.write_text("\n".join(",".join(str(value) for value in row) for row in rows), encoding="utf-8")
+    return path
+
+
 def compare(
     tmp_path: Path,
     old_sheets: Mapping[str, Mapping[str, object]],
@@ -54,13 +59,21 @@ def test_same_input_file_is_rejected(tmp_path: Path) -> None:
         CompareUseCase().execute(source, source, tmp_path / "output.xlsx", CompareOptions())
 
 
-@pytest.mark.parametrize("bad_name", ["input.xlsm", "input.csv"])
+@pytest.mark.parametrize("bad_name", ["input.xlsm", "input.json"])
 def test_unsupported_input_extension_is_rejected(tmp_path: Path, bad_name: str) -> None:
     bad = tmp_path / bad_name
     bad.write_bytes(b"not used")
     new = make_workbook(tmp_path / "new.xlsx", {"Data": {}})
-    with pytest.raises(InvalidInputError, match=r"\.xlsx または \.xls"):
+    with pytest.raises(InvalidInputError, match=r"\.xlsx、\.xls、\.csv"):
         CompareUseCase().execute(bad, new, tmp_path / "output.xlsx", CompareOptions())
+
+
+def test_mixed_input_formats_are_rejected(tmp_path: Path) -> None:
+    old = make_csv(tmp_path / "old.csv", [["id", "value"], [1, "old"]])
+    new = make_workbook(tmp_path / "new.xlsx", {"Data": {"A1": "id"}})
+
+    with pytest.raises(InvalidInputError, match="同じ形式"):
+        CompareUseCase().execute(old, new, tmp_path / "output.xlsx", CompareOptions())
 
 
 def test_xls_input_reaches_conversion_layer(tmp_path: Path) -> None:
@@ -100,6 +113,47 @@ def test_xls_input_can_be_prepared_by_injected_converter(tmp_path: Path) -> None
     assert workbook["比較結果"]["D11"].value == "old"
     assert workbook["比較結果"]["E11"].value == "new"
     workbook.close()
+
+
+def test_csv_files_are_compared_and_written_to_excel_report(tmp_path: Path) -> None:
+    old = make_csv(tmp_path / "old.csv", [["id", "value"], [1, "old"], [2, "keep"]])
+    new = make_csv(tmp_path / "new.csv", [["id", "value"], [1, "new"], [2, "keep"], [3, "added"]])
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase().execute(old, new, output, CompareOptions())
+
+    assert result.count(DifferenceType.MODIFIED) == 1
+    assert result.count(DifferenceType.ADDED) == 2
+    workbook = load_workbook(output)
+    assert workbook.sheetnames == ["比較結果", "CSV"]
+    assert workbook["CSV"]["B2"].value == "new"
+    assert workbook["CSV"]["A4"].value == "3"
+    report = workbook["比較結果"]
+    rows = {report.cell(row, 3).value: row for row in range(11, 14)}
+    modified_row = rows["B2"]
+    assert report.cell(modified_row, 1).value == "変更"
+    assert report.cell(modified_row, 2).value == "CSV"
+    assert report.cell(modified_row, 6).hyperlink.target == "#'CSV'!B2"
+    workbook.close()
+
+
+def test_csv_key_column_compare_matches_moved_rows(tmp_path: Path) -> None:
+    old = make_csv(tmp_path / "old.csv", [["id", "value"], [1, "old"]])
+    new = make_csv(tmp_path / "new.csv", [["id", "value"], [2, "other"], [1, "new"]])
+
+    result = CompareUseCase().execute(
+        old,
+        new,
+        tmp_path / "output.xlsx",
+        CompareOptions(algorithm=CompareAlgorithm.KEY_COLUMNS, key_columns=("A",)),
+    )
+
+    assert result.count(DifferenceType.MODIFIED) == 1
+    assert result.count(DifferenceType.ROW_ADDED) == 1
+    modified = [difference for difference in result.differences if difference.kind is DifferenceType.MODIFIED][0]
+    assert modified.cell == "B3"
+    assert modified.old_value == "old"
+    assert modified.new_value == "new"
 
 
 def test_missing_input_file_is_rejected(tmp_path: Path) -> None:

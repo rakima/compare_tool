@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+from .csv_compare import CsvComparer, CsvReader, CsvReportWriter
 from .errors import InvalidInputError, OperationCancelledError
 from .excel import ExcelComparer, ExcelReader, ExcelReportWriter
 from .models import CompareOptions, CompareResult
@@ -20,11 +21,17 @@ class CompareUseCase:
         comparer: ExcelComparer | None = None,
         writer: ExcelReportWriter | None = None,
         workbook_preparer: WorkbookPreparer | None = None,
+        csv_reader: CsvReader | None = None,
+        csv_comparer: CsvComparer | None = None,
+        csv_writer: CsvReportWriter | None = None,
     ) -> None:
         self.reader = reader or ExcelReader()
         self.comparer = comparer or ExcelComparer()
         self.writer = writer or ExcelReportWriter()
         self.workbook_preparer = workbook_preparer or WorkbookPreparer()
+        self.csv_reader = csv_reader or CsvReader()
+        self.csv_comparer = csv_comparer or CsvComparer()
+        self.csv_writer = csv_writer or CsvReportWriter()
 
     def execute(
         self,
@@ -45,6 +52,11 @@ class CompareUseCase:
             raise InvalidInputError("出力ファイルの拡張子は .xlsx にしてください。")
         if self._same_file(new, output) or self._same_file(old, output):
             raise InvalidInputError("出力先には入力ファイルと異なるパスを指定してください。")
+        if self._format_family(old) != self._format_family(new):
+            raise InvalidInputError("旧ファイルと新ファイルは同じ形式を指定してください。")
+
+        if self._format_family(old) == "csv":
+            return self._execute_csv(old, new, output, options, detailed, cancel_requested, progress_callback)
 
         self._raise_if_cancelled(cancel_requested)
         self._notify(progress_callback, "入力ファイルを準備しています...")
@@ -68,11 +80,39 @@ class CompareUseCase:
         self._notify(progress_callback, "比較結果Excelの作成が完了しました。")
         return result
 
+    def _execute_csv(
+        self,
+        old: Path,
+        new: Path,
+        output: Path,
+        options: CompareOptions,
+        detailed: bool,
+        cancel_requested: CancelCheck | None,
+        progress_callback: ProgressCallback | None,
+    ) -> CompareResult:
+        self._raise_if_cancelled(cancel_requested)
+        self._notify(progress_callback, "旧CSVファイルを読み込んでいます...")
+        old_document = self.csv_reader.read(old)
+        self._raise_if_cancelled(cancel_requested)
+        self._notify(progress_callback, "新CSVファイルを読み込んでいます...")
+        new_document = self.csv_reader.read(new)
+        self._raise_if_cancelled(cancel_requested)
+        self._notify(progress_callback, "差分を検出しています...")
+        result = self.csv_comparer.compare(old_document, new_document, options, cancel_requested)
+        self._raise_if_cancelled(cancel_requested)
+        self._notify(progress_callback, f"差分を {result.total:,} 件検出しました。")
+        if detailed and result.total >= LARGE_DIFFERENCE_NOTICE_THRESHOLD:
+            self._notify(progress_callback, "差分が多いため、詳細レポートの作成に時間がかかる場合があります。")
+        self._notify(progress_callback, "比較結果Excelを作成しています...")
+        self.csv_writer.write(new, output, result, detailed, cancel_requested)
+        self._notify(progress_callback, "比較結果Excelの作成が完了しました。")
+        return result
+
     @staticmethod
     def _validate(path_value: str | Path, label: str) -> Path:
         path = Path(path_value).expanduser()
-        if path.suffix.lower() not in SUPPORTED_INPUT_EXTENSIONS:
-            raise InvalidInputError(f"{label}は .xlsx または .xls ファイルを指定してください。")
+        if path.suffix.lower() not in SUPPORTED_INPUT_EXTENSIONS | {".csv"}:
+            raise InvalidInputError(f"{label}は .xlsx、.xls、.csv のいずれかを指定してください。")
         if not path.is_file():
             raise InvalidInputError(f"{label}が見つかりません: {path}")
         return path
@@ -83,6 +123,10 @@ class CompareUseCase:
             return left.resolve().samefile(right.resolve())
         except (FileNotFoundError, OSError):
             return str(left.resolve()).casefold() == str(right.resolve()).casefold()
+
+    @staticmethod
+    def _format_family(path: Path) -> str:
+        return "csv" if path.suffix.lower() == ".csv" else "excel"
 
     @staticmethod
     def _raise_if_cancelled(cancel_requested: CancelCheck | None) -> None:
