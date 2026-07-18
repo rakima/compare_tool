@@ -3,8 +3,8 @@ from pathlib import Path
 from openpyxl import Workbook, load_workbook
 
 from compare_tool.errors import PasswordProtectedWorkbookError
-from compare_tool.excel import CellData, ExcelComparer, ExcelDocument
-from compare_tool.models import CompareOptions, DifferenceType
+from compare_tool.excel import CellCoordinateCompareAlgorithm, CellData, ExcelComparer, ExcelDocument
+from compare_tool.models import CompareAlgorithm, CompareOptions, Difference, DifferenceType
 from compare_tool.usecase import CompareUseCase
 
 
@@ -35,6 +35,26 @@ def test_formula_comparison_can_be_disabled() -> None:
     difference = ExcelComparer().compare(old, new, CompareOptions()).differences[0]
     assert difference.formula_changed
     assert difference.old_value == "=SUM(B1:B2)"
+
+
+def test_excel_comparer_uses_selected_algorithm() -> None:
+    class StubAlgorithm(CellCoordinateCompareAlgorithm):
+        def compare_sheet(
+            self,
+            sheet: str,
+            old_cells: dict[str, CellData],
+            new_cells: dict[str, CellData],
+            options: CompareOptions,
+            cancel_requested: object = None,
+        ) -> list[Difference]:
+            return [Difference(DifferenceType.MODIFIED, sheet, "A1", "stub-old", "stub-new")]
+
+    comparer = ExcelComparer({CompareAlgorithm.CELL_COORDINATE: StubAlgorithm()})
+    result = comparer.compare(ExcelDocument({"S": {}}), ExcelDocument({"S": {}}), CompareOptions())
+
+    assert [(difference.kind, difference.sheet, difference.cell) for difference in result.differences] == [
+        (DifferenceType.MODIFIED, "S", "A1")
+    ]
 
 
 def test_encrypted_workbook_signature_has_specific_error(tmp_path: Path) -> None:

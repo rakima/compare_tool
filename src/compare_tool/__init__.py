@@ -2,7 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from .models import CompareOptions, CompareResult, Difference, DifferenceType
+from .models import CompareAlgorithm, CompareOptions, CompareResult, Difference, DifferenceType
 from .usecase import CompareUseCase
 
 try:
@@ -12,6 +12,7 @@ except PackageNotFoundError:
 
 __all__ = [
     "CompareOptions",
+    "CompareAlgorithm",
     "CompareResult",
     "CompareUseCase",
     "Difference",

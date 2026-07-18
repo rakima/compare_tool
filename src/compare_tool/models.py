@@ -14,6 +14,10 @@ class DifferenceType(str, Enum):
     SHEET_DELETED = "シート削除"
 
 
+class CompareAlgorithm(str, Enum):
+    CELL_COORDINATE = "cell_coordinate"
+
+
 @dataclass(frozen=True, slots=True)
 class CompareOptions:
     compare_values: bool = True
@@ -21,6 +25,7 @@ class CompareOptions:
     empty_string_equals_empty: bool = True
     ignore_surrounding_whitespace: bool = False
     ignore_case: bool = False
+    algorithm: CompareAlgorithm = CompareAlgorithm.CELL_COORDINATE
 
 
 @dataclass(frozen=True, slots=True)

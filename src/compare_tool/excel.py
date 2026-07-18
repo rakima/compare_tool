@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+from abc import ABC, abstractmethod
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,7 +17,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from .comparer import CancelCheck, Comparer
 from .errors import OperationCancelledError, OutputWriteError, PasswordProtectedWorkbookError, WorkbookReadError
-from .models import CompareOptions, CompareResult, Difference, DifferenceType
+from .models import CompareAlgorithm, CompareOptions, CompareResult, Difference, DifferenceType
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,41 +81,31 @@ class ExcelReader:
             values_book.close()
 
 
-class ExcelComparer(Comparer[ExcelDocument]):
-    def compare(
-        self,
-        old: ExcelDocument,
-        new: ExcelDocument,
-        options: CompareOptions,
-        cancel_requested: CancelCheck | None = None,
-    ) -> CompareResult:
-        differences: list[Difference] = []
-        old_names = set(old.sheets)
-        new_names = set(new.sheets)
-
-        for name in sorted(new_names - old_names):
-            self._raise_if_cancelled(cancel_requested)
-            differences.append(Difference(DifferenceType.SHEET_ADDED, name))
-        for name in sorted(old_names - new_names):
-            self._raise_if_cancelled(cancel_requested)
-            differences.append(Difference(DifferenceType.SHEET_DELETED, name))
-
-        for name in sorted(old_names & new_names):
-            self._raise_if_cancelled(cancel_requested)
-            differences.extend(self._compare_sheet(name, old.sheets[name], new.sheets[name], options, cancel_requested))
-        return CompareResult(differences)
-
-    def _compare_sheet(
+class ExcelCompareAlgorithm(ABC):
+    @abstractmethod
+    def compare_sheet(
         self,
         sheet: str,
         old_cells: dict[str, CellData],
         new_cells: dict[str, CellData],
         options: CompareOptions,
-        cancel_requested: CancelCheck | None,
+        cancel_requested: CancelCheck | None = None,
+    ) -> list[Difference]:
+        raise NotImplementedError
+
+
+class CellCoordinateCompareAlgorithm(ExcelCompareAlgorithm):
+    def compare_sheet(
+        self,
+        sheet: str,
+        old_cells: dict[str, CellData],
+        new_cells: dict[str, CellData],
+        options: CompareOptions,
+        cancel_requested: CancelCheck | None = None,
     ) -> list[Difference]:
         result: list[Difference] = []
         for coordinate in sorted(set(old_cells) | set(new_cells)):
-            self._raise_if_cancelled(cancel_requested)
+            raise_if_cancelled(cancel_requested)
             old = old_cells.get(coordinate, CellData())
             new = new_cells.get(coordinate, CellData())
             value_changed = options.compare_values and not self._equal(old.value, new.value, options)
@@ -147,10 +138,46 @@ class ExcelComparer(Comparer[ExcelDocument]):
 
         return normalize(left) == normalize(right)
 
-    @staticmethod
-    def _raise_if_cancelled(cancel_requested: CancelCheck | None) -> None:
-        if cancel_requested is not None and cancel_requested():
-            raise OperationCancelledError("比較をキャンセルしました。")
+
+def raise_if_cancelled(cancel_requested: CancelCheck | None) -> None:
+    if cancel_requested is not None and cancel_requested():
+        raise OperationCancelledError("比較をキャンセルしました。")
+
+
+class ExcelComparer(Comparer[ExcelDocument]):
+    def __init__(self, algorithms: dict[CompareAlgorithm, ExcelCompareAlgorithm] | None = None) -> None:
+        self.algorithms = algorithms or {
+            CompareAlgorithm.CELL_COORDINATE: CellCoordinateCompareAlgorithm(),
+        }
+
+    def compare(
+        self,
+        old: ExcelDocument,
+        new: ExcelDocument,
+        options: CompareOptions,
+        cancel_requested: CancelCheck | None = None,
+    ) -> CompareResult:
+        differences: list[Difference] = []
+        old_names = set(old.sheets)
+        new_names = set(new.sheets)
+
+        for name in sorted(new_names - old_names):
+            raise_if_cancelled(cancel_requested)
+            differences.append(Difference(DifferenceType.SHEET_ADDED, name))
+        for name in sorted(old_names - new_names):
+            raise_if_cancelled(cancel_requested)
+            differences.append(Difference(DifferenceType.SHEET_DELETED, name))
+
+        algorithm = self._algorithm(options.algorithm)
+        for name in sorted(old_names & new_names):
+            raise_if_cancelled(cancel_requested)
+            differences.extend(
+                algorithm.compare_sheet(name, old.sheets[name], new.sheets[name], options, cancel_requested)
+            )
+        return CompareResult(differences)
+
+    def _algorithm(self, selected: CompareAlgorithm) -> ExcelCompareAlgorithm:
+        return self.algorithms[selected]
 
 
 class ExcelReportWriter:
