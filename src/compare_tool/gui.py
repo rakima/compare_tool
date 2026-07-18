@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import threading
 import tkinter as tk
 from datetime import datetime
@@ -108,6 +109,7 @@ class CompareApp:
         key_entry = ttk.Entry(options, textvariable=self.key_columns, width=18)
         key_entry.grid(row=4, column=1, sticky="w", pady=(9, 0))
         self.busy_controls.append(key_entry)
+        ttk.Label(options, text="例: A または A,C").grid(row=4, column=2, sticky="w", pady=(9, 0))
 
         actions = ttk.Frame(main)
         actions.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(0, 10))
@@ -221,6 +223,28 @@ class CompareApp:
                 self.status.set("ファイルが見つかりません")
                 self._log(f"{label}が見つかりません: {path}")
                 return False
+        return self.algorithm.get() != CompareAlgorithm.KEY_COLUMNS.value or self._validate_key_columns()
+
+    def _validate_key_columns(self) -> bool:
+        columns = self._key_columns()
+        if not columns:
+            messagebox.showwarning("キー列未指定", "キー列で比較する場合はキー列を指定してください。\n例: A または A,C")
+            self.status.set("キー列を指定してください")
+            self._log("キー列未指定のため比較を開始できません。")
+            return False
+        invalid = [column for column in columns if not re.fullmatch(r"[A-Z]{1,3}", column)]
+        if invalid:
+            values = ", ".join(invalid)
+            message = f"キー列は列名だけを指定してください。\n不正な指定: {values}\n例: A または A,C"
+            messagebox.showwarning("キー列指定エラー", message)
+            self.status.set("キー列指定エラー")
+            self._log(f"キー列の不正な指定を拒否しました: {values}")
+            return False
+        if len(set(columns)) != len(columns):
+            messagebox.showwarning("キー列指定エラー", "キー列が重複しています。")
+            self.status.set("キー列指定エラー")
+            self._log("重複したキー列指定を拒否しました。")
+            return False
         return True
 
     def _options(self) -> CompareOptions:

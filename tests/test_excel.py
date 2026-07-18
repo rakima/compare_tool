@@ -132,6 +132,30 @@ def test_key_column_compare_rejects_duplicate_keys() -> None:
         )
 
 
+def test_key_column_compare_rejects_cell_reference_as_key_column() -> None:
+    old = ExcelDocument({"S": {"A2": CellData("001")}})
+    new = ExcelDocument({"S": {"A2": CellData("001")}})
+
+    with pytest.raises(InvalidInputError, match="列名だけ"):
+        ExcelComparer().compare(
+            old,
+            new,
+            CompareOptions(algorithm=CompareAlgorithm.KEY_COLUMNS, key_columns=("A1",)),
+        )
+
+
+def test_key_column_compare_rejects_repeated_key_columns() -> None:
+    old = ExcelDocument({"S": {"A2": CellData("001")}})
+    new = ExcelDocument({"S": {"A2": CellData("001")}})
+
+    with pytest.raises(InvalidInputError, match="重複"):
+        ExcelComparer().compare(
+            old,
+            new,
+            CompareOptions(algorithm=CompareAlgorithm.KEY_COLUMNS, key_columns=("A", "A")),
+        )
+
+
 def test_encrypted_workbook_signature_has_specific_error(tmp_path: Path) -> None:
     encrypted = tmp_path / "encrypted.xlsx"
     encrypted.write_bytes(bytes.fromhex("D0CF11E0A1B11AE1") + b"encrypted")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 from abc import ABC, abstractmethod
@@ -308,7 +309,15 @@ class KeyColumnCompareAlgorithm(ExcelCompareAlgorithm):
     def _key_columns(options: CompareOptions) -> tuple[str, ...]:
         if not options.key_columns:
             raise InvalidInputError("キー列比較ではキー列を指定してください。")
-        return tuple(get_column_letter(column_index_from_string(column)) for column in options.key_columns)
+        columns: list[str] = []
+        for column in options.key_columns:
+            normalized = column.strip().upper()
+            if not re.fullmatch(r"[A-Z]{1,3}", normalized):
+                raise InvalidInputError(f"キー列は列名だけを指定してください: {column}")
+            columns.append(get_column_letter(column_index_from_string(normalized)))
+        if len(set(columns)) != len(columns):
+            raise InvalidInputError("キー列が重複しています。")
+        return tuple(columns)
 
     def _rows_by_key(
         self,
