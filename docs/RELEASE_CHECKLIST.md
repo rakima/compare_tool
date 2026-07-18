@@ -24,6 +24,7 @@ git push origin v0.1.1
 ## After tagging
 
 - Confirm the `Build Windows App` workflow succeeds.
-- Download the `compare_tool-v<version>-windows` artifact.
-- Smoke test the artifact on a clean folder.
+- Confirm the GitHub Release has `compare_tool-v<version>-windows.zip` in Assets.
+- Download and unzip `compare_tool-v<version>-windows.zip`.
+- Smoke test `compare_tool.exe` on a clean folder.
 - Publish release notes with supported formats and known limitations.

@@ -90,6 +90,8 @@ python -m PyInstaller compare_tool.spec --noconfirm --clean
 
 GitHub Actionsの `Build Windows App` は手動実行、または `v*` タグのpushでWindows実行ファイルをビルドし、`compare_tool-v<version>-windows` artifactとして保存します。
 
+`v*` タグのpush時は、`compare_tool-v<version>-windows.zip` をGitHub ReleaseのAssetsにもアップロードします。zipには `compare_tool.exe`、`README.md`、`LICENSE`、`docs` が含まれます。
+
 リリース前の確認項目は [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) にまとめています。
 
 ## 既知の制限

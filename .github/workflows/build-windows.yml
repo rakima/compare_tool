@@ -7,7 +7,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -41,9 +41,36 @@ jobs:
       - name: Build executable
         run: python -m PyInstaller compare_tool.spec --noconfirm --clean
 
-      - name: Upload executable
+      - name: Package release zip
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $packageDir = "dist/package/compare_tool"
+          New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+          Copy-Item dist/compare_tool.exe "$packageDir/compare_tool.exe"
+          Copy-Item README.md "$packageDir/README.md"
+          Copy-Item LICENSE "$packageDir/LICENSE"
+          Copy-Item docs "$packageDir/docs" -Recurse
+          Compress-Archive -Path "dist/package/compare_tool" -DestinationPath "dist/compare_tool-v$version-windows.zip" -Force
+
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: compare_tool-v${{ steps.version.outputs.version }}-windows
-          path: dist/compare_tool.exe
+          path: dist/compare_tool-v${{ steps.version.outputs.version }}-windows.zip
           if-no-files-found: error
+
+      - name: Upload release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = "${{ steps.version.outputs.version }}"
+          $asset = "dist/compare_tool-v$version-windows.zip"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title "compare_tool $tag" --notes "Windows executable package."
+          }
+          gh release upload $tag $asset --clobber
