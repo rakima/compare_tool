@@ -10,6 +10,7 @@ from openpyxl.styles import PatternFill
 from compare_tool.errors import InvalidInputError, OperationCancelledError, OutputWriteError, WorkbookReadError
 from compare_tool.excel import ExcelReportWriter
 from compare_tool.models import CompareOptions, CompareResult, Difference, DifferenceType
+from compare_tool.settings import AppSettingsStore
 from compare_tool.usecase import CompareUseCase
 
 
@@ -106,6 +107,21 @@ def test_existing_output_is_preserved_when_report_creation_fails(tmp_path: Path)
 
     assert output.read_bytes() == original_content
     assert list(tmp_path.glob(".existing_*.tmp.xlsx")) == []
+
+
+def test_clearing_file_history_preserves_last_save_directory(tmp_path: Path) -> None:
+    settings = AppSettingsStore(tmp_path / "settings.json")
+    output = tmp_path / "output"
+    output.mkdir()
+    source = tmp_path / "source.xlsx"
+    source.write_bytes(b"test")
+    settings.save_last_save_dir(output)
+    settings.save_file_history([str(source)])
+
+    settings.clear_file_history()
+
+    assert settings.load_file_history() == []
+    assert settings.load_last_save_dir() == output.resolve()
 
 
 def test_successful_report_atomically_replaces_existing_output(tmp_path: Path) -> None:

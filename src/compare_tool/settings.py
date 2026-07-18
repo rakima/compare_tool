@@ -45,6 +45,11 @@ class AppSettingsStore:
         data["file_history"] = unique[:limit]
         self._write(data)
 
+    def clear_file_history(self) -> None:
+        data = self._read()
+        data["file_history"] = []
+        self._write(data)
+
     def _read(self) -> dict[str, object]:
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))

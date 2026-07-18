@@ -57,7 +57,7 @@ class CompareApp:
         main = ttk.Frame(self.root, padding=14)
         main.pack(fill="both", expand=True)
         main.columnconfigure(1, weight=1)
-        main.rowconfigure(5, weight=1)
+        main.rowconfigure(6, weight=1)
 
         header = ttk.Frame(main)
         header.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 12))
@@ -66,9 +66,16 @@ class CompareApp:
         ttk.Label(header, text=f"v{__version__}").grid(row=0, column=1, sticky="e")
         self.old_entry = self._file_row(main, 1, "旧ファイル", self.old_path)
         self.new_entry = self._file_row(main, 2, "新ファイル", self.new_path)
+        file_actions = ttk.Frame(main)
+        file_actions.grid(row=3, column=1, columnspan=2, sticky="e", pady=(2, 0))
+        self.swap_button = ttk.Button(file_actions, text="旧/新を入替", command=self._swap_inputs)
+        self.swap_button.pack(side="left")
+        self.clear_history_button = ttk.Button(file_actions, text="履歴クリア", command=self._clear_history)
+        self.clear_history_button.pack(side="left", padx=(8, 0))
+        self.busy_controls.extend([self.swap_button, self.clear_history_button])
 
         options = ttk.LabelFrame(main, text="比較オプション", padding=10)
-        options.grid(row=3, column=0, columnspan=3, sticky="ew", pady=12)
+        options.grid(row=4, column=0, columnspan=3, sticky="ew", pady=12)
         checks = [
             ("セル値を比較", self.compare_values),
             ("数式を比較", self.compare_formulas),
@@ -87,19 +94,26 @@ class CompareApp:
             self.busy_controls.append(radio)
 
         actions = ttk.Frame(main)
-        actions.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(0, 10))
+        actions.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(0, 10))
         self.compare_button = ttk.Button(actions, text="比較開始", command=self._start_compare)
         self.compare_button.pack(side="left")
         self.cancel_button = ttk.Button(actions, text="キャンセル", command=self._cancel_compare, state="disabled")
         self.cancel_button.pack(side="left", padx=(8, 0))
         self.open_button = ttk.Button(actions, text="出力ファイルを開く", command=self._open_output, state="disabled")
         self.open_button.pack(side="left", padx=(8, 0))
+        self.open_folder_button = ttk.Button(
+            actions,
+            text="保存フォルダを開く",
+            command=self._open_output_folder,
+            state="disabled",
+        )
+        self.open_folder_button.pack(side="left", padx=(8, 0))
         ttk.Label(actions, textvariable=self.status).pack(side="left", padx=12)
         self.progress = ttk.Progressbar(actions, mode="indeterminate", length=130)
         self.progress.pack(side="right")
 
         log_frame = ttk.LabelFrame(main, text="ログ", padding=6)
-        log_frame.grid(row=5, column=0, columnspan=3, sticky="nsew")
+        log_frame.grid(row=6, column=0, columnspan=3, sticky="nsew")
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
         self.log = tk.Text(log_frame, height=13, wrap="word", state="disabled")
@@ -140,12 +154,15 @@ class CompareApp:
         variable.set(str(path))
 
     def _start_compare(self) -> None:
+        if not self._validate_inputs():
+            return
         if not self.compare_values.get() and not self.compare_formulas.get():
             messagebox.showwarning("比較オプション", "セル値または数式の少なくとも一方を選択してください。")
             return
-        new_path = Path(self.new_path.get()) if self.new_path.get() else Path("新ファイル.xlsx")
+        new_path = Path(self.new_path.get())
         suggested = f"{new_path.stem}_比較結果.xlsx"
         initial_dir = self._default_save_dir(new_path)
+        self._log(f"保存先候補: {initial_dir / suggested}")
         output = filedialog.asksaveasfilename(
             title="比較結果の保存先",
             defaultextension=".xlsx",
@@ -157,6 +174,7 @@ class CompareApp:
             return
         self.last_output = None
         self.open_button.configure(state="disabled")
+        self.open_folder_button.configure(state="disabled")
         self._set_busy(True)
         self.cancel_event = threading.Event()
         self.status.set("比較中...")
@@ -165,6 +183,29 @@ class CompareApp:
             self._log("詳細表示では、差分が多い場合にレポート作成へ時間がかかることがあります。")
         args = (self.old_path.get(), self.new_path.get(), output, self._options(), self.view_mode.get() == "detail")
         threading.Thread(target=self._run_compare, args=args, daemon=True).start()
+
+    def _validate_inputs(self) -> bool:
+        old_value = self.old_path.get().strip()
+        new_value = self.new_path.get().strip()
+        if not old_value or not new_value:
+            messagebox.showwarning("ファイル未指定", "旧ファイルと新ファイルを指定してください。")
+            self.status.set("ファイルを指定してください")
+            self._log("ファイル未指定のため比較を開始できません。")
+            return False
+
+        for label, value in [("旧ファイル", old_value), ("新ファイル", new_value)]:
+            path = Path(value)
+            if path.suffix.lower() != ".xlsx":
+                messagebox.showwarning("対象外ファイル", f"{label}は .xlsx ファイルを指定してください。")
+                self.status.set("対象外ファイル")
+                self._log(f"{label}の対象外ファイルを拒否しました: {path}")
+                return False
+            if not path.is_file():
+                messagebox.showwarning("ファイルが見つかりません", f"{label}が見つかりません。\n{path}")
+                self.status.set("ファイルが見つかりません")
+                self._log(f"{label}が見つかりません: {path}")
+                return False
+        return True
 
     def _options(self) -> CompareOptions:
         return CompareOptions(
@@ -212,13 +253,16 @@ class CompareApp:
         self._set_busy(False)
         self.cancel_event = None
         self.open_button.configure(state="normal")
+        self.open_folder_button.configure(state="normal")
         self.status.set("比較完了")
         self._log(f"比較完了: {detail}\n出力先: {output}")
-        messagebox.showinfo("比較完了", f"比較結果を保存しました。\n{output}")
+        if messagebox.askyesno("比較完了", f"比較結果を保存しました。\n{output}\n\n出力ファイルを開きますか？"):
+            self._open_output()
 
     def _failure(self, message: str) -> None:
         self._set_busy(False)
         self.cancel_event = None
+        self.open_folder_button.configure(state="disabled")
         self.status.set("エラー")
         self._log(f"エラー: {message}")
         messagebox.showerror("エラー", message)
@@ -226,6 +270,7 @@ class CompareApp:
     def _cancelled(self) -> None:
         self._set_busy(False)
         self.cancel_event = None
+        self.open_folder_button.configure(state="disabled")
         self.status.set("キャンセルしました")
         self._log("比較をキャンセルしました。出力ファイルは作成していません。")
 
@@ -253,20 +298,54 @@ class CompareApp:
         current = [self.old_path.get(), self.new_path.get()]
         self.file_history = current + [path for path in self.file_history if path not in current]
         self.settings.save_file_history(self.file_history)
+        self._refresh_history()
+
+    def _refresh_history(self) -> None:
         self.file_history = self.settings.load_file_history()
         self.old_entry.configure(values=self.file_history)
         self.new_entry.configure(values=self.file_history)
 
+    def _swap_inputs(self) -> None:
+        old_value = self.old_path.get()
+        self.old_path.set(self.new_path.get())
+        self.new_path.set(old_value)
+        self._log("旧ファイルと新ファイルを入れ替えました。")
+
+    def _clear_history(self) -> None:
+        if not self.file_history:
+            self._log("ファイル履歴は空です。")
+            return
+        self.settings.clear_file_history()
+        self._refresh_history()
+        self._log("ファイル履歴をクリアしました。")
+
     def _open_output(self) -> None:
-        if self.last_output is None or not self.last_output.is_file():
-            messagebox.showwarning("ファイルを開けません", "出力ファイルが見つかりません。")
-            self.open_button.configure(state="disabled")
+        output = self._validated_last_output()
+        if output is None:
             return
         try:
-            os.startfile(self.last_output)
+            os.startfile(output)
         except OSError as exc:
             self._log(f"出力ファイルを開けません: {exc}")
             messagebox.showerror("ファイルを開けません", str(exc))
+
+    def _open_output_folder(self) -> None:
+        output = self._validated_last_output()
+        if output is None:
+            return
+        try:
+            os.startfile(output.parent)
+        except OSError as exc:
+            self._log(f"保存フォルダを開けません: {exc}")
+            messagebox.showerror("フォルダを開けません", str(exc))
+
+    def _validated_last_output(self) -> Path | None:
+        if self.last_output is None or not self.last_output.is_file():
+            messagebox.showwarning("ファイルを開けません", "出力ファイルが見つかりません。")
+            self.open_button.configure(state="disabled")
+            self.open_folder_button.configure(state="disabled")
+            return None
+        return self.last_output
 
     def _default_save_dir(self, new_path: Path) -> Path:
         if self.last_save_dir is not None and self.last_save_dir.is_dir():
