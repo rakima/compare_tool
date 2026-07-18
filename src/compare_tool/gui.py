@@ -52,6 +52,8 @@ class CompareApp:
         self.is_busy = False
         self.cancel_event: threading.Event | None = None
         self.busy_controls: list[ttk.Widget] = []
+        self.excel_only_controls: list[ttk.Widget] = []
+        self.csv_only_controls: list[ttk.Widget] = []
         self.old_path = tk.StringVar()
         self.new_path = tk.StringVar()
         self.compare_values = tk.BooleanVar(value=True)
@@ -66,6 +68,9 @@ class CompareApp:
         self.view_mode = tk.StringVar(value="detail")
         self.status = tk.StringVar(value="ファイルを指定してください")
         self._build()
+        self.old_path.trace_add("write", self._on_input_path_changed)
+        self.new_path.trace_add("write", self._on_input_path_changed)
+        self._update_option_states()
 
     def _build(self) -> None:
         self.root.title(f"compare_tool v{__version__} - ファイル差分比較")
@@ -105,6 +110,8 @@ class CompareApp:
             checkbutton = ttk.Checkbutton(options, text=text, variable=variable)
             checkbutton.grid(row=index // 3, column=index % 3, sticky="w", padx=(0, 28), pady=3)
             self.busy_controls.append(checkbutton)
+            if text == "数式を比較":
+                self.excel_only_controls.append(checkbutton)
         ttk.Label(options, text="表示方法:").grid(row=2, column=0, sticky="w", pady=(9, 0))
         for column, text, value in [(1, "詳細表示", "detail"), (2, "サマリー表示", "summary")]:
             radio = ttk.Radiobutton(options, text=text, variable=self.view_mode, value=value)
@@ -135,6 +142,7 @@ class CompareApp:
         )
         encoding_combo.grid(row=5, column=1, sticky="w", pady=(9, 0))
         self.busy_controls.append(encoding_combo)
+        self.csv_only_controls.append(encoding_combo)
         ttk.Label(options, text="CSV区切り文字:").grid(row=5, column=2, sticky="w", pady=(9, 0))
         delimiter_combo = ttk.Combobox(
             options,
@@ -145,6 +153,7 @@ class CompareApp:
         )
         delimiter_combo.grid(row=5, column=3, sticky="w", pady=(9, 0))
         self.busy_controls.append(delimiter_combo)
+        self.csv_only_controls.append(delimiter_combo)
 
         actions = ttk.Frame(main)
         actions.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(0, 10))
@@ -298,6 +307,45 @@ class CompareApp:
             return False
         return True
 
+    def _on_input_path_changed(self, *_args: object) -> None:
+        self._update_option_states()
+
+    def _update_option_states(self) -> None:
+        if self.is_busy:
+            return
+
+        family = self._selected_format_family()
+        if family == "csv":
+            self.compare_formulas.set(False)
+            self._set_controls_enabled(self.excel_only_controls, False)
+            self._set_controls_enabled(self.csv_only_controls, True)
+        elif family == "excel":
+            self._set_controls_enabled(self.excel_only_controls, True)
+            self._set_controls_enabled(self.csv_only_controls, False)
+        else:
+            self._set_controls_enabled(self.excel_only_controls, False)
+            self._set_controls_enabled(self.csv_only_controls, False)
+
+    def _selected_format_family(self) -> str | None:
+        old = self.old_path.get().strip()
+        new = self.new_path.get().strip()
+        if not old or not new:
+            return None
+        old_suffix = Path(old).suffix.lower()
+        new_suffix = Path(new).suffix.lower()
+        if old_suffix not in GUI_INPUT_EXTENSIONS or new_suffix not in GUI_INPUT_EXTENSIONS:
+            return None
+        old_family = self._format_family(Path(old))
+        new_family = self._format_family(Path(new))
+        if old_family != new_family:
+            return None
+        return old_family
+
+    @staticmethod
+    def _set_controls_enabled(controls: list[ttk.Widget], enabled: bool) -> None:
+        for control in controls:
+            control.state(["!disabled"] if enabled else ["disabled"])
+
     def _options(self) -> CompareOptions:
         return CompareOptions(
             compare_values=self.compare_values.get(),
@@ -392,6 +440,8 @@ class CompareApp:
         self.cancel_button.configure(state="normal" if busy else "disabled")
         for control in self.busy_controls:
             control.state(["disabled"] if busy else ["!disabled"])
+        if not busy:
+            self._update_option_states()
 
     def _remember_inputs(self) -> None:
         current = [self.old_path.get(), self.new_path.get()]
