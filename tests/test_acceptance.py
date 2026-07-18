@@ -218,6 +218,13 @@ def test_csv_encoding_and_delimiter_options_are_used(tmp_path: Path) -> None:
     assert report["C11"].value == "B2"
     assert report["D11"].value == "東京"
     assert report["E11"].value == "大阪"
+    assert report["H1"].value == "CSV読み込み設定"
+    assert report["H2"].value == "文字コード"
+    assert report["I2"].value == "Shift_JIS"
+    assert report["H3"].value == "区切り文字"
+    assert report["I3"].value == "タブ"
+    assert report["H4"].value == "空行を無視"
+    assert report["I4"].value == "はい"
     workbook.close()
 
 

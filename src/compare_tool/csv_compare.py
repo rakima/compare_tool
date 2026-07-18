@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from openpyxl import Workbook
+from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.worksheet import Worksheet
@@ -21,6 +22,18 @@ CSV_SHEET_NAME = "CSV"
 CSV_AUTO_ENCODING = "auto"
 CSV_AUTO_DELIMITER = "auto"
 CSV_DELIMITER_CANDIDATES = (",", "\t", ";")
+CSV_ENCODING_LABELS = {
+    "auto": "自動",
+    "utf-8-sig": "UTF-8 / UTF-8 BOM",
+    "utf-8": "UTF-8",
+    "cp932": "Shift_JIS",
+}
+CSV_DELIMITER_LABELS = {
+    "auto": "自動",
+    ",": "カンマ",
+    "\t": "タブ",
+    ";": "セミコロン",
+}
 
 
 @dataclass(slots=True)
@@ -207,12 +220,14 @@ class CsvReportWriter(ExcelReportWriter):
             temporary_output = Path(temporary_name)
 
             csv_document = CsvReader().read(source_new, options)
+            options = options or CompareOptions()
             workbook = Workbook()
             csv_sheet = workbook.active
             csv_sheet.title = CSV_SHEET_NAME
             self._write_csv_sheet(csv_sheet, csv_document, cancel_requested)
             report = workbook.create_sheet(self._unique_report_name(workbook.sheetnames), 0)
             self._write_report(report, result, detailed, cancel_requested)
+            self._write_csv_settings(report, options)
             self._highlight_differences(workbook, result, cancel_requested)
             self._raise_if_cancelled(cancel_requested)
             workbook.save(temporary_output)
@@ -241,3 +256,18 @@ class CsvReportWriter(ExcelReportWriter):
             raise_if_cancelled(cancel_requested)
             for column_index, value in enumerate(row, 1):
                 sheet.cell(row_index, column_index, value)
+
+    @classmethod
+    def _write_csv_settings(cls, sheet: Worksheet, options: CompareOptions) -> None:
+        sheet["H1"] = "CSV読み込み設定"
+        sheet["H1"].font = Font(bold=True, size=14)
+        rows = [
+            ("文字コード", CSV_ENCODING_LABELS.get(options.csv_encoding, options.csv_encoding)),
+            ("区切り文字", CSV_DELIMITER_LABELS.get(options.csv_delimiter, options.csv_delimiter)),
+            ("空行を無視", "はい" if options.ignore_csv_blank_lines else "いいえ"),
+        ]
+        for row_index, (label, value) in enumerate(rows, 2):
+            cls._write_cell(sheet, row_index, 8, label)
+            cls._write_cell(sheet, row_index, 9, value)
+        sheet.column_dimensions["H"].width = 18
+        sheet.column_dimensions["I"].width = 24
