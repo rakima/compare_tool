@@ -56,6 +56,7 @@ class CompareUseCase:
             raise InvalidInputError("旧ファイルと新ファイルは同じ形式を指定してください。")
 
         if self._format_family(old) == "csv":
+            self._validate_csv_options(options)
             return self._execute_csv(old, new, output, options, detailed, cancel_requested, progress_callback)
 
         self._raise_if_cancelled(cancel_requested)
@@ -92,10 +93,10 @@ class CompareUseCase:
     ) -> CompareResult:
         self._raise_if_cancelled(cancel_requested)
         self._notify(progress_callback, "旧CSVファイルを読み込んでいます...")
-        old_document = self.csv_reader.read(old)
+        old_document = self.csv_reader.read(old, options)
         self._raise_if_cancelled(cancel_requested)
         self._notify(progress_callback, "新CSVファイルを読み込んでいます...")
-        new_document = self.csv_reader.read(new)
+        new_document = self.csv_reader.read(new, options)
         self._raise_if_cancelled(cancel_requested)
         self._notify(progress_callback, "差分を検出しています...")
         result = self.csv_comparer.compare(old_document, new_document, options, cancel_requested)
@@ -104,7 +105,7 @@ class CompareUseCase:
         if detailed and result.total >= LARGE_DIFFERENCE_NOTICE_THRESHOLD:
             self._notify(progress_callback, "差分が多いため、詳細レポートの作成に時間がかかる場合があります。")
         self._notify(progress_callback, "比較結果Excelを作成しています...")
-        self.csv_writer.write(new, output, result, detailed, cancel_requested)
+        self.csv_writer.write(new, output, result, detailed, cancel_requested, options)
         self._notify(progress_callback, "比較結果Excelの作成が完了しました。")
         return result
 
@@ -127,6 +128,11 @@ class CompareUseCase:
     @staticmethod
     def _format_family(path: Path) -> str:
         return "csv" if path.suffix.lower() == ".csv" else "excel"
+
+    @staticmethod
+    def _validate_csv_options(options: CompareOptions) -> None:
+        if len(options.csv_delimiter) != 1:
+            raise InvalidInputError("CSV区切り文字は1文字で指定してください。")
 
     @staticmethod
     def _raise_if_cancelled(cancel_requested: CancelCheck | None) -> None:

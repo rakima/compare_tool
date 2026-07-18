@@ -35,12 +35,15 @@ class CsvDocument:
 
 
 class CsvReader:
-    def read(self, path: Path) -> CsvDocument:
+    def read(self, path: Path, options: CompareOptions | None = None) -> CsvDocument:
+        options = options or CompareOptions()
         try:
-            with path.open("r", encoding="utf-8-sig", newline="") as stream:
-                return CsvDocument([row for row in csv.reader(stream)])
+            with path.open("r", encoding=options.csv_encoding, newline="") as stream:
+                return CsvDocument([row for row in csv.reader(stream, delimiter=options.csv_delimiter)])
+        except LookupError as exc:
+            raise WorkbookReadError(f"CSVの文字コード指定が不正です: {options.csv_encoding}") from exc
         except UnicodeDecodeError as exc:
-            raise WorkbookReadError(f"CSVファイルをUTF-8として読み取れません: {path}") from exc
+            raise WorkbookReadError(f"CSVファイルを {options.csv_encoding} として読み取れません: {path}") from exc
         except OSError as exc:
             raise WorkbookReadError(f"CSVファイルを読み取れません: {path}") from exc
         except csv.Error as exc:
@@ -74,6 +77,7 @@ class CsvReportWriter(ExcelReportWriter):
         result: CompareResult,
         detailed: bool = True,
         cancel_requested: CancelCheck | None = None,
+        options: CompareOptions | None = None,
     ) -> Path:
         workbook = None
         temporary_output: Path | None = None
@@ -88,7 +92,7 @@ class CsvReportWriter(ExcelReportWriter):
             os.close(file_descriptor)
             temporary_output = Path(temporary_name)
 
-            csv_document = CsvReader().read(source_new)
+            csv_document = CsvReader().read(source_new, options)
             workbook = Workbook()
             csv_sheet = workbook.active
             csv_sheet.title = CSV_SHEET_NAME

@@ -17,6 +17,17 @@ from .settings import AppSettingsStore
 from .usecase import CompareUseCase
 from .workbook_preparer import SUPPORTED_INPUT_EXTENSIONS
 
+GUI_INPUT_EXTENSIONS = SUPPORTED_INPUT_EXTENSIONS | {".csv"}
+CSV_ENCODINGS = {
+    "UTF-8 / UTF-8 BOM": "utf-8-sig",
+    "Shift_JIS": "cp932",
+}
+CSV_DELIMITERS = {
+    "カンマ ,": ",",
+    "タブ": "\t",
+    "セミコロン ;": ";",
+}
+
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
 except ImportError:  # The application remains usable without optional DnD support.
@@ -49,12 +60,14 @@ class CompareApp:
         self.ignore_case = tk.BooleanVar(value=False)
         self.algorithm = tk.StringVar(value=CompareAlgorithm.CELL_COORDINATE.value)
         self.key_columns = tk.StringVar()
+        self.csv_encoding = tk.StringVar(value="UTF-8 / UTF-8 BOM")
+        self.csv_delimiter = tk.StringVar(value="カンマ ,")
         self.view_mode = tk.StringVar(value="detail")
         self.status = tk.StringVar(value="ファイルを指定してください")
         self._build()
 
     def _build(self) -> None:
-        self.root.title(f"compare_tool v{__version__} - Excel差分比較")
+        self.root.title(f"compare_tool v{__version__} - ファイル差分比較")
         self.root.geometry("920x650")
         self.root.minsize(760, 560)
 
@@ -66,7 +79,7 @@ class CompareApp:
         header = ttk.Frame(main)
         header.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 12))
         header.columnconfigure(0, weight=1)
-        ttk.Label(header, text="Excel差分比較", font=("Yu Gothic UI", 16, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="ファイル差分比較", font=("Yu Gothic UI", 16, "bold")).grid(row=0, column=0, sticky="w")
         ttk.Label(header, text=f"v{__version__}").grid(row=0, column=1, sticky="e")
         self.old_entry = self._file_row(main, 1, "旧ファイル", self.old_path)
         self.new_entry = self._file_row(main, 2, "新ファイル", self.new_path)
@@ -111,6 +124,26 @@ class CompareApp:
         key_entry.grid(row=4, column=1, sticky="w", pady=(9, 0))
         self.busy_controls.append(key_entry)
         ttk.Label(options, text="例: A または A,C").grid(row=4, column=2, sticky="w", pady=(9, 0))
+        ttk.Label(options, text="CSV文字コード:").grid(row=5, column=0, sticky="w", pady=(9, 0))
+        encoding_combo = ttk.Combobox(
+            options,
+            textvariable=self.csv_encoding,
+            values=list(CSV_ENCODINGS),
+            state="readonly",
+            width=18,
+        )
+        encoding_combo.grid(row=5, column=1, sticky="w", pady=(9, 0))
+        self.busy_controls.append(encoding_combo)
+        ttk.Label(options, text="CSV区切り文字:").grid(row=5, column=2, sticky="w", pady=(9, 0))
+        delimiter_combo = ttk.Combobox(
+            options,
+            textvariable=self.csv_delimiter,
+            values=list(CSV_DELIMITERS),
+            state="readonly",
+            width=14,
+        )
+        delimiter_combo.grid(row=5, column=3, sticky="w", pady=(9, 0))
+        self.busy_controls.append(delimiter_combo)
 
         actions = ttk.Frame(main)
         actions.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(0, 10))
@@ -273,6 +306,8 @@ class CompareApp:
             ignore_case=self.ignore_case.get(),
             algorithm=CompareAlgorithm(self.algorithm.get()),
             key_columns=self._key_columns(),
+            csv_encoding=CSV_ENCODINGS[self.csv_encoding.get()],
+            csv_delimiter=CSV_DELIMITERS[self.csv_delimiter.get()],
         )
 
     def _key_columns(self) -> tuple[str, ...]:
@@ -432,4 +467,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-GUI_INPUT_EXTENSIONS = SUPPORTED_INPUT_EXTENSIONS | {".csv"}

@@ -33,8 +33,17 @@ def make_workbook(path: Path, sheets: Mapping[str, Mapping[str, object]]) -> Pat
     return path
 
 
-def make_csv(path: Path, rows: list[list[object]]) -> Path:
-    path.write_text("\n".join(",".join(str(value) for value in row) for row in rows), encoding="utf-8")
+def make_csv(
+    path: Path,
+    rows: list[list[object]],
+    *,
+    encoding: str = "utf-8",
+    delimiter: str = ",",
+) -> Path:
+    path.write_text(
+        "\n".join(delimiter.join(str(value) for value in row) for row in rows),
+        encoding=encoding,
+    )
     return path
 
 
@@ -154,6 +163,51 @@ def test_csv_key_column_compare_matches_moved_rows(tmp_path: Path) -> None:
     assert modified.cell == "B3"
     assert modified.old_value == "old"
     assert modified.new_value == "new"
+
+
+def test_csv_encoding_and_delimiter_options_are_used(tmp_path: Path) -> None:
+    old = make_csv(
+        tmp_path / "old.csv",
+        [["id", "名前"], [1, "東京"]],
+        encoding="cp932",
+        delimiter="\t",
+    )
+    new = make_csv(
+        tmp_path / "new.csv",
+        [["id", "名前"], [1, "大阪"]],
+        encoding="cp932",
+        delimiter="\t",
+    )
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase().execute(
+        old,
+        new,
+        output,
+        CompareOptions(csv_encoding="cp932", csv_delimiter="\t"),
+    )
+
+    assert result.count(DifferenceType.MODIFIED) == 1
+    workbook = load_workbook(output)
+    assert workbook["CSV"]["B2"].value == "大阪"
+    report = workbook["比較結果"]
+    assert report["C11"].value == "B2"
+    assert report["D11"].value == "東京"
+    assert report["E11"].value == "大阪"
+    workbook.close()
+
+
+def test_invalid_csv_delimiter_is_rejected(tmp_path: Path) -> None:
+    old = make_csv(tmp_path / "old.csv", [["id", "value"]])
+    new = make_csv(tmp_path / "new.csv", [["id", "value"]])
+
+    with pytest.raises(InvalidInputError, match="CSV区切り文字"):
+        CompareUseCase().execute(
+            old,
+            new,
+            tmp_path / "output.xlsx",
+            CompareOptions(csv_delimiter="||"),
+        )
 
 
 def test_missing_input_file_is_rejected(tmp_path: Path) -> None:
