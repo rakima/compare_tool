@@ -8,7 +8,7 @@ block_cipher = None
 tkinterdnd2_datas = collect_data_files("tkinterdnd2")
 
 a = Analysis(
-    ["src/compare_tool/__main__.py"],
+    ["tools/run_gui.py"],
     pathex=["src"],
     binaries=[],
     datas=tkinterdnd2_datas,
