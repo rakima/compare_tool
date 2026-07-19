@@ -53,6 +53,11 @@ def make_json(path: Path, data: object) -> Path:
     return path
 
 
+def make_xml(path: Path, text: str) -> Path:
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
 def compare(
     tmp_path: Path,
     old_sheets: Mapping[str, Mapping[str, object]],
@@ -74,12 +79,12 @@ def test_same_input_file_is_rejected(tmp_path: Path) -> None:
         CompareUseCase().execute(source, source, tmp_path / "output.xlsx", CompareOptions())
 
 
-@pytest.mark.parametrize("bad_name", ["input.xlsm", "input.xml"])
+@pytest.mark.parametrize("bad_name", ["input.xlsm", "input.yaml"])
 def test_unsupported_input_extension_is_rejected(tmp_path: Path, bad_name: str) -> None:
     bad = tmp_path / bad_name
     bad.write_bytes(b"not used")
     new = make_workbook(tmp_path / "new.xlsx", {"Data": {}})
-    with pytest.raises(InvalidInputError, match=r"\.xlsx、\.xls、\.csv、\.json"):
+    with pytest.raises(InvalidInputError, match=r"\.xlsx、\.xls、\.csv、\.json、\.xml"):
         CompareUseCase().execute(bad, new, tmp_path / "output.xlsx", CompareOptions())
 
 
@@ -394,6 +399,55 @@ def test_json_array_order_ignore_still_reports_different_array_contents(tmp_path
     ]
 
 
+def test_xml_files_are_compared_and_written_to_excel_report(tmp_path: Path) -> None:
+    old = make_xml(tmp_path / "old.xml", '<root enabled="true"><name>old</name></root>')
+    new = make_xml(tmp_path / "new.xml", '<root enabled="false"><name>new</name><item /></root>')
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase().execute(old, new, output, CompareOptions())
+
+    assert result.count(DifferenceType.MODIFIED) == 2
+    assert result.count(DifferenceType.ADDED) == 1
+    workbook = load_workbook(output)
+    assert workbook.sheetnames == ["比較結果", "XML"]
+    report = workbook["比較結果"]
+    rows = {report.cell(row, 3).value: row for row in range(11, 14)}
+    assert report.cell(rows["/root/@enabled"], 1).value == "変更"
+    assert report.cell(rows["/root/@enabled"], 2).value == "XML"
+    assert report.cell(rows["/root/@enabled"], 4).value == "true"
+    assert report.cell(rows["/root/@enabled"], 5).value == "false"
+    assert report.cell(rows["/root/@enabled"], 6).value is None
+    assert report["H1"].value == "XML読み込み設定"
+    assert report["I4"].value == "はい"
+    assert report["I5"].value == "はい"
+    assert workbook["XML"]["A1"].value == "新XML"
+    workbook.close()
+
+
+def test_xml_options_are_used_and_recorded(tmp_path: Path) -> None:
+    old = make_xml(tmp_path / "old.xml", '<root a="1" b="2"><name>A</name></root>')
+    new = make_xml(tmp_path / "new.xml", '<root b="2" a="1"> <name>A</name></root>')
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase().execute(
+        old,
+        new,
+        output,
+        CompareOptions(ignore_xml_attribute_order=False, ignore_xml_blank_text=False),
+    )
+
+    assert result.count(DifferenceType.MODIFIED) == 2
+    workbook = load_workbook(output)
+    report = workbook["比較結果"]
+    rows = {report.cell(row, 3).value: row for row in range(11, 13)}
+    assert report.cell(rows["/root/@*"], 4).value == "a, b"
+    assert report.cell(rows["/root/@*"], 5).value == "b, a"
+    assert report.cell(rows["/root"], 5).value == " "
+    assert report["I4"].value == "いいえ"
+    assert report["I5"].value == "いいえ"
+    workbook.close()
+
+
 def test_missing_input_file_is_rejected(tmp_path: Path) -> None:
     new = make_workbook(tmp_path / "new.xlsx", {"Data": {}})
     with pytest.raises(InvalidInputError, match="見つかりません"):
@@ -477,6 +531,8 @@ def test_compare_options_and_view_mode_are_persisted(tmp_path: Path) -> None:
         ignore_csv_blank_lines=False,
         ignore_json_object_key_order=False,
         ignore_json_array_order=True,
+        ignore_xml_attribute_order=False,
+        ignore_xml_blank_text=False,
     )
 
     settings.save_compare_options(options)

@@ -17,7 +17,7 @@ from .settings import AppSettingsStore
 from .usecase import CompareUseCase
 from .workbook_preparer import SUPPORTED_INPUT_EXTENSIONS
 
-GUI_INPUT_EXTENSIONS = SUPPORTED_INPUT_EXTENSIONS | {".csv", ".json"}
+GUI_INPUT_EXTENSIONS = SUPPORTED_INPUT_EXTENSIONS | {".csv", ".json", ".xml"}
 CSV_ENCODINGS = {
     "自動": "auto",
     "UTF-8 / UTF-8 BOM": "utf-8-sig",
@@ -59,6 +59,7 @@ class CompareApp:
         self.table_options_frame: ttk.LabelFrame | None = None
         self.csv_options_frame: ttk.LabelFrame | None = None
         self.json_options_frame: ttk.LabelFrame | None = None
+        self.xml_options_frame: ttk.LabelFrame | None = None
         self.old_path = tk.StringVar()
         self.new_path = tk.StringVar()
         self.compare_values = tk.BooleanVar(value=saved_options.compare_values)
@@ -73,6 +74,8 @@ class CompareApp:
         self.ignore_csv_blank_lines = tk.BooleanVar(value=saved_options.ignore_csv_blank_lines)
         self.ignore_json_object_key_order = tk.BooleanVar(value=saved_options.ignore_json_object_key_order)
         self.ignore_json_array_order = tk.BooleanVar(value=saved_options.ignore_json_array_order)
+        self.ignore_xml_attribute_order = tk.BooleanVar(value=saved_options.ignore_xml_attribute_order)
+        self.ignore_xml_blank_text = tk.BooleanVar(value=saved_options.ignore_xml_blank_text)
         self.view_mode = tk.StringVar(value=saved_view_mode)
         self.status = tk.StringVar(value="ファイルを指定してください")
         self._build()
@@ -207,6 +210,27 @@ class CompareApp:
         json_array_order_check.grid(row=2, column=0, sticky="w", pady=(3, 0))
         self.busy_controls.append(json_array_order_check)
 
+        self.xml_options_frame = ttk.LabelFrame(options, text="XMLオプション", padding=8)
+        self.xml_options_frame.grid(row=5, column=0, sticky="ew", pady=(10, 0))
+        ttk.Label(
+            self.xml_options_frame,
+            text="XPath風パス単位で比較します。同名兄弟要素は出現順で比較します。",
+        ).grid(row=0, column=0, sticky="w")
+        xml_attribute_order_check = ttk.Checkbutton(
+            self.xml_options_frame,
+            text="属性順を無視",
+            variable=self.ignore_xml_attribute_order,
+        )
+        xml_attribute_order_check.grid(row=1, column=0, sticky="w", pady=(9, 0))
+        self.busy_controls.append(xml_attribute_order_check)
+        xml_blank_text_check = ttk.Checkbutton(
+            self.xml_options_frame,
+            text="空白のみテキストを無視",
+            variable=self.ignore_xml_blank_text,
+        )
+        xml_blank_text_check.grid(row=2, column=0, sticky="w", pady=(3, 0))
+        self.busy_controls.append(xml_blank_text_check)
+
         log_frame = ttk.LabelFrame(main, text="ログ", padding=6)
         log_frame.grid(row=5, column=0, columnspan=3, sticky="nsew")
         log_frame.columnconfigure(0, weight=1)
@@ -253,10 +277,11 @@ class CompareApp:
         selected = filedialog.askopenfilename(
             title="比較ファイルを選択",
             filetypes=[
-                ("対応ファイル", "*.xlsx *.xls *.csv *.json"),
+                ("対応ファイル", "*.xlsx *.xls *.csv *.json *.xml"),
                 ("Excel", "*.xlsx *.xls"),
                 ("CSV", "*.csv"),
                 ("JSON", "*.json"),
+                ("XML", "*.xml"),
             ],
         )
         if selected:
@@ -270,7 +295,7 @@ class CompareApp:
             return
         path = Path(paths[0])
         if path.suffix.lower() not in GUI_INPUT_EXTENSIONS:
-            messagebox.showwarning("対象外ファイル", ".xlsx、.xls、.csv、.json ファイルのみ指定できます。")
+            messagebox.showwarning("対象外ファイル", ".xlsx、.xls、.csv、.json、.xml ファイルのみ指定できます。")
             self._log(f"対象外ファイルを拒否しました: {path}")
             return
         variable.set(str(path))
@@ -320,7 +345,7 @@ class CompareApp:
             if path.suffix.lower() not in GUI_INPUT_EXTENSIONS:
                 messagebox.showwarning(
                     "対象外ファイル",
-                    f"{label}は .xlsx、.xls、.csv、.json のいずれかを指定してください。",
+                    f"{label}は .xlsx、.xls、.csv、.json、.xml のいずれかを指定してください。",
                 )
                 self.status.set("対象外ファイル")
                 self._log(f"{label}の対象外ファイルを拒否しました: {path}")
@@ -344,6 +369,8 @@ class CompareApp:
             return "csv"
         if suffix == ".json":
             return "json"
+        if suffix == ".xml":
+            return "xml"
         return "excel"
 
     def _validate_key_columns(self) -> bool:
@@ -380,12 +407,13 @@ class CompareApp:
         self._set_frame_visible(self.table_options_frame, family in {"excel", "csv"})
         self._set_frame_visible(self.csv_options_frame, family == "csv")
         self._set_frame_visible(self.json_options_frame, family == "json")
+        self._set_frame_visible(self.xml_options_frame, family == "xml")
 
         if family == "csv":
             self.compare_formulas.set(False)
         elif family == "excel":
             return
-        elif family == "json":
+        elif family in {"json", "xml"}:
             self.compare_formulas.set(False)
             if self.algorithm.get() != CompareAlgorithm.CELL_COORDINATE.value:
                 self.algorithm.set(CompareAlgorithm.CELL_COORDINATE.value)
@@ -430,6 +458,8 @@ class CompareApp:
             ignore_csv_blank_lines=self.ignore_csv_blank_lines.get(),
             ignore_json_object_key_order=self.ignore_json_object_key_order.get(),
             ignore_json_array_order=self.ignore_json_array_order.get(),
+            ignore_xml_attribute_order=self.ignore_xml_attribute_order.get(),
+            ignore_xml_blank_text=self.ignore_xml_blank_text.get(),
         )
 
     @staticmethod
