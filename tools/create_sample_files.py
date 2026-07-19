@@ -1,6 +1,7 @@
 """Create sample files for manually checking compare_tool."""
 
 import csv
+import json
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -92,6 +93,48 @@ def create_csv(path: Path, *, new: bool, encoding: str = "utf-8-sig", delimiter:
         writer.writerows(rows)
 
 
+def create_json(path: Path, *, new: bool) -> None:
+    data = (
+        {
+            "product": {
+                "id": "P001",
+                "name": "ノートPC",
+                "price": 120000,
+                "tags": ["pc", "business", "new"],
+            },
+            "settings": {
+                "enabled": True,
+                "mode": "standard",
+            },
+            "items": [
+                {"id": "P001", "quantity": 2},
+                {"id": "P002", "quantity": 10},
+                {"id": "P004", "quantity": 4},
+            ],
+            "added": "新JSONで追加されたキー",
+        }
+        if new
+        else {
+            "product": {
+                "id": "P001",
+                "name": "ノートPC",
+                "price": 100000,
+                "tags": ["pc", "business"],
+            },
+            "settings": {
+                "enabled": True,
+                "mode": "standard",
+            },
+            "items": [
+                {"id": "P001", "quantity": 2},
+                {"id": "P002", "quantity": 8},
+            ],
+            "removed": "新JSONでは削除されたキー",
+        }
+    )
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     create_workbook(OUTPUT_DIR / "比較サンプル_旧.xlsx", new=False)
@@ -100,6 +143,8 @@ def main() -> None:
     create_csv(OUTPUT_DIR / "比較サンプル_新.csv", new=True)
     create_csv(OUTPUT_DIR / "比較サンプル_ShiftJIS_Tab_旧.csv", new=False, encoding="cp932", delimiter="\t")
     create_csv(OUTPUT_DIR / "比較サンプル_ShiftJIS_Tab_新.csv", new=True, encoding="cp932", delimiter="\t")
+    create_json(OUTPUT_DIR / "比較サンプル_旧.json", new=False)
+    create_json(OUTPUT_DIR / "比較サンプル_新.json", new=True)
     print(f"Created sample files in {OUTPUT_DIR}")
 
 
