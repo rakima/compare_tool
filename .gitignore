@@ -4,7 +4,10 @@ __pycache__/
 .venv/
 *.egg-info/
 build/
+build*/
 dist/
+dist*/
+*.zip
 samples/*
 
 tests/test_settings.py
