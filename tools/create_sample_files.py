@@ -135,6 +135,50 @@ def create_json(path: Path, *, new: bool) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def create_xml(path: Path, *, new: bool) -> None:
+    text = (
+        """<?xml version="1.0" encoding="UTF-8"?>
+<catalog enabled="false" added="yes">
+  <product id="P001">
+    <name>ノートPC</name>
+    <price>120000</price>
+    <tags>
+      <tag>pc</tag>
+      <tag>business</tag>
+      <tag>new</tag>
+    </tags>
+  </product>
+  <items>
+    <item id="P001" quantity="2" />
+    <item id="P002" quantity="10" />
+    <item id="P004" quantity="4" />
+  </items>
+  <note>Sample</note>
+</catalog>
+"""
+        if new
+        else """<?xml version="1.0" encoding="UTF-8"?>
+<catalog enabled="true" removed="yes">
+  <product id="P001">
+    <name>ノートPC</name>
+    <price>100000</price>
+    <tags>
+      <tag>pc</tag>
+      <tag>business</tag>
+    </tags>
+  </product>
+  <items>
+    <item id="P001" quantity="2" />
+    <item id="P002" quantity="8" />
+    <item id="P003" quantity="5" />
+  </items>
+  <note> Sample </note>
+</catalog>
+"""
+    )
+    path.write_text(text, encoding="utf-8")
+
+
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     create_workbook(OUTPUT_DIR / "比較サンプル_旧.xlsx", new=False)
@@ -145,6 +189,8 @@ def main() -> None:
     create_csv(OUTPUT_DIR / "比較サンプル_ShiftJIS_Tab_新.csv", new=True, encoding="cp932", delimiter="\t")
     create_json(OUTPUT_DIR / "比較サンプル_旧.json", new=False)
     create_json(OUTPUT_DIR / "比較サンプル_新.json", new=True)
+    create_xml(OUTPUT_DIR / "比較サンプル_旧.xml", new=False)
+    create_xml(OUTPUT_DIR / "比較サンプル_新.xml", new=True)
     print(f"Created sample files in {OUTPUT_DIR}")
 
 
