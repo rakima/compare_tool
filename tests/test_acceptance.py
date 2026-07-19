@@ -322,6 +322,73 @@ def test_json_files_are_compared_and_written_to_excel_report(tmp_path: Path) -> 
     workbook.close()
 
 
+def test_json_object_key_order_option_is_used_and_recorded(tmp_path: Path) -> None:
+    old = make_json(tmp_path / "old.json", {"a": 1, "b": 2})
+    new = make_json(tmp_path / "new.json", {"b": 2, "a": 1})
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase().execute(
+        old,
+        new,
+        output,
+        CompareOptions(ignore_json_object_key_order=False),
+    )
+
+    assert result.count(DifferenceType.MODIFIED) == 1
+    difference = result.differences[0]
+    assert difference.cell == "$"
+    assert difference.old_value == ["a", "b"]
+    assert difference.new_value == ["b", "a"]
+    workbook = load_workbook(output)
+    report = workbook["比較結果"]
+    assert report["C11"].value == "$"
+    assert report["D11"].value == '["a", "b"]'
+    assert report["E11"].value == '["b", "a"]'
+    assert report["H4"].value == "オブジェクトのキー順を無視"
+    assert report["I4"].value == "いいえ"
+    assert report["H5"].value == "配列順序を無視"
+    assert report["I5"].value == "いいえ"
+    workbook.close()
+
+
+def test_json_array_order_can_be_ignored_through_usecase(tmp_path: Path) -> None:
+    old = make_json(tmp_path / "old.json", {"items": [{"id": 1}, {"id": 2}]})
+    new = make_json(tmp_path / "new.json", {"items": [{"id": 2}, {"id": 1}]})
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase().execute(
+        old,
+        new,
+        output,
+        CompareOptions(ignore_json_array_order=True),
+    )
+
+    assert result.total == 0
+    workbook = load_workbook(output)
+    report = workbook["比較結果"]
+    assert report["A11"].value is None
+    assert report["I5"].value == "はい"
+    workbook.close()
+
+
+def test_json_array_order_ignore_still_reports_different_array_contents(tmp_path: Path) -> None:
+    old = make_json(tmp_path / "old.json", {"items": [{"id": 1}, {"id": 2}]})
+    new = make_json(tmp_path / "new.json", {"items": [{"id": 2}, {"id": 3}]})
+
+    result = CompareUseCase().execute(
+        old,
+        new,
+        tmp_path / "output.xlsx",
+        CompareOptions(ignore_json_array_order=True),
+    )
+
+    assert result.count(DifferenceType.MODIFIED) == 1
+    difference = result.differences[0]
+    assert difference.cell == "$.items"
+    assert difference.old_value == [{"id": 1}, {"id": 2}]
+    assert difference.new_value == [{"id": 2}, {"id": 3}]
+
+
 def test_missing_input_file_is_rejected(tmp_path: Path) -> None:
     new = make_workbook(tmp_path / "new.xlsx", {"Data": {}})
     with pytest.raises(InvalidInputError, match="見つかりません"):
