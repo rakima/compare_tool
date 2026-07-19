@@ -403,6 +403,8 @@ def test_compare_options_and_view_mode_are_persisted(tmp_path: Path) -> None:
         csv_encoding="cp932",
         csv_delimiter="\t",
         ignore_csv_blank_lines=False,
+        ignore_json_object_key_order=False,
+        ignore_json_array_order=True,
     )
 
     settings.save_compare_options(options)

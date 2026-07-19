@@ -88,6 +88,14 @@ class AppSettingsStore:
                 raw.get("ignore_csv_blank_lines"),
                 defaults.ignore_csv_blank_lines,
             ),
+            ignore_json_object_key_order=self._bool(
+                raw.get("ignore_json_object_key_order"),
+                defaults.ignore_json_object_key_order,
+            ),
+            ignore_json_array_order=self._bool(
+                raw.get("ignore_json_array_order"),
+                defaults.ignore_json_array_order,
+            ),
         )
 
     def save_compare_options(self, options: CompareOptions) -> None:
@@ -103,6 +111,8 @@ class AppSettingsStore:
             "csv_encoding": options.csv_encoding,
             "csv_delimiter": options.csv_delimiter,
             "ignore_csv_blank_lines": options.ignore_csv_blank_lines,
+            "ignore_json_object_key_order": options.ignore_json_object_key_order,
+            "ignore_json_array_order": options.ignore_json_array_order,
         }
         self._write(data)
 

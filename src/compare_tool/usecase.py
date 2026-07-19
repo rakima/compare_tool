@@ -114,7 +114,7 @@ class CompareUseCase:
         if detailed and result.total >= LARGE_DIFFERENCE_NOTICE_THRESHOLD:
             self._notify(progress_callback, "差分が多いため、詳細レポートの作成に時間がかかる場合があります。")
         self._notify(progress_callback, "比較結果Excelを作成しています...")
-        self.json_writer.write(new, output, result, detailed, cancel_requested)
+        self.json_writer.write(new, output, result, detailed, cancel_requested, options)
         self._notify(progress_callback, "比較結果Excelの作成が完了しました。")
         return result
 

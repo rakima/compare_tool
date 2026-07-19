@@ -83,6 +83,33 @@ def test_json_comparer_uses_string_normalization_options(tmp_path: Path) -> None
     assert result.total == 0
 
 
+def test_json_comparer_can_compare_object_key_order(tmp_path: Path) -> None:
+    old = JsonReader().read(write_json(tmp_path / "old.json", {"a": 1, "b": 2}))
+    new = JsonReader().read(write_json(tmp_path / "new.json", {"b": 2, "a": 1}))
+
+    ignored = JsonComparer().compare(old, new, CompareOptions())
+    compared = JsonComparer().compare(old, new, CompareOptions(ignore_json_object_key_order=False))
+
+    assert ignored.total == 0
+    assert compared.total == 1
+    difference = compared.differences[0]
+    assert difference.kind is DifferenceType.MODIFIED
+    assert difference.cell == "$"
+    assert difference.old_value == ["a", "b"]
+    assert difference.new_value == ["b", "a"]
+
+
+def test_json_comparer_can_ignore_array_order(tmp_path: Path) -> None:
+    old = JsonReader().read(write_json(tmp_path / "old.json", {"items": [{"id": 1}, {"id": 2}]}))
+    new = JsonReader().read(write_json(tmp_path / "new.json", {"items": [{"id": 2}, {"id": 1}]}))
+
+    indexed = JsonComparer().compare(old, new, CompareOptions())
+    ignored = JsonComparer().compare(old, new, CompareOptions(ignore_json_array_order=True))
+
+    assert indexed.total == 2
+    assert ignored.total == 0
+
+
 def test_json_comparer_escapes_non_identifier_keys(tmp_path: Path) -> None:
     old = JsonReader().read(write_json(tmp_path / "old.json", {"display name": "old"}))
     new = JsonReader().read(write_json(tmp_path / "new.json", {"display name": "new"}))
@@ -108,7 +135,12 @@ def test_json_report_writer_outputs_xlsx_report(tmp_path: Path) -> None:
     result = JsonComparer().compare(old, new, CompareOptions())
     output = tmp_path / "output.xlsx"
 
-    JsonReportWriter().write(new_path, output, result)
+    JsonReportWriter().write(
+        new_path,
+        output,
+        result,
+        options=CompareOptions(ignore_json_object_key_order=False, ignore_json_array_order=True),
+    )
 
     workbook = load_workbook(output)
     assert workbook.sheetnames == ["比較結果", "JSON"]
@@ -120,7 +152,8 @@ def test_json_report_writer_outputs_xlsx_report(tmp_path: Path) -> None:
     assert report["H1"].value == "JSON読み込み設定"
     assert report["I2"].value == "UTF-8 / UTF-8 BOM"
     assert report["I3"].value == "JSON Path"
-    assert report["I4"].value == "インデックス比較"
+    assert report["I4"].value == "いいえ"
+    assert report["I5"].value == "はい"
     json_sheet = workbook["JSON"]
     assert json_sheet["A1"].value == "新JSON"
     assert json_sheet["A2"].value == "{"

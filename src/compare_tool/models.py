@@ -34,6 +34,8 @@ class CompareOptions:
     csv_encoding: str = "auto"
     csv_delimiter: str = "auto"
     ignore_csv_blank_lines: bool = True
+    ignore_json_object_key_order: bool = True
+    ignore_json_array_order: bool = False
 
 
 @dataclass(frozen=True, slots=True)

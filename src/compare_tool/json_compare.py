@@ -99,6 +99,17 @@ class JsonComparer(Comparer[JsonDocument]):
         differences: list[Difference],
         cancel_requested: CancelCheck | None,
     ) -> None:
+        if not options.ignore_json_object_key_order and list(old.keys()) != list(new.keys()):
+            differences.append(
+                Difference(
+                    DifferenceType.MODIFIED,
+                    JSON_SHEET_NAME,
+                    path,
+                    list(old.keys()),
+                    list(new.keys()),
+                    value_changed=True,
+                )
+            )
         for key in sorted(old.keys() - new.keys()):
             self._raise_if_cancelled(cancel_requested)
             differences.append(
@@ -133,6 +144,21 @@ class JsonComparer(Comparer[JsonDocument]):
         differences: list[Difference],
         cancel_requested: CancelCheck | None,
     ) -> None:
+        if options.ignore_json_array_order:
+            if self._unordered_array_equal(old, new, options):
+                return
+            differences.append(
+                Difference(
+                    DifferenceType.MODIFIED,
+                    JSON_SHEET_NAME,
+                    path,
+                    old,
+                    new,
+                    value_changed=True,
+                )
+            )
+            return
+
         common_length = min(len(old), len(new))
         for index in range(common_length):
             self._compare_value(f"{path}[{index}]", old[index], new[index], options, differences, cancel_requested)
@@ -164,6 +190,37 @@ class JsonComparer(Comparer[JsonDocument]):
 
         return normalize(left) == normalize(right)
 
+    @classmethod
+    def _unordered_array_equal(cls, old: list[Any], new: list[Any], options: CompareOptions) -> bool:
+        old_values = sorted(cls._canonical_json_value(value, options) for value in old)
+        new_values = sorted(cls._canonical_json_value(value, options) for value in new)
+        return old_values == new_values
+
+    @classmethod
+    def _canonical_json_value(cls, value: Any, options: CompareOptions) -> str:
+        return json.dumps(
+            cls._normalize_json_value(value, options),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+    @classmethod
+    def _normalize_json_value(cls, value: Any, options: CompareOptions) -> Any:
+        if options.empty_string_equals_empty and value == "":
+            return None
+        if isinstance(value, str):
+            if options.ignore_surrounding_whitespace:
+                value = value.strip()
+            if options.ignore_case:
+                value = value.casefold()
+            return value
+        if isinstance(value, dict):
+            return {key: cls._normalize_json_value(item, options) for key, item in value.items()}
+        if isinstance(value, list):
+            return [cls._normalize_json_value(item, options) for item in value]
+        return value
+
     @staticmethod
     def _raise_if_cancelled(cancel_requested: CancelCheck | None) -> None:
         if cancel_requested is not None and cancel_requested():
@@ -178,6 +235,7 @@ class JsonReportWriter(ExcelReportWriter):
         result: CompareResult,
         detailed: bool = True,
         cancel_requested: CancelCheck | None = None,
+        options: CompareOptions | None = None,
     ) -> Path:
         workbook = None
         temporary_output: Path | None = None
@@ -200,7 +258,7 @@ class JsonReportWriter(ExcelReportWriter):
             report = workbook.create_sheet(self._unique_report_name(workbook.sheetnames), 0)
             self._write_report(report, self._displayable_result(result), detailed, cancel_requested)
             self._remove_json_links(report, result)
-            self._write_json_settings(report)
+            self._write_json_settings(report, options or CompareOptions())
             self._raise_if_cancelled(cancel_requested)
             workbook.save(temporary_output)
             workbook.close()
@@ -265,13 +323,14 @@ class JsonReportWriter(ExcelReportWriter):
             cell.style = "Normal"
 
     @classmethod
-    def _write_json_settings(cls, sheet: Worksheet) -> None:
+    def _write_json_settings(cls, sheet: Worksheet, options: CompareOptions) -> None:
         sheet["H1"] = "JSON読み込み設定"
         sheet["H1"].font = Font(bold=True, size=14)
         rows = [
             ("文字コード", "UTF-8 / UTF-8 BOM"),
             ("比較位置", "JSON Path"),
-            ("配列比較", "インデックス比較"),
+            ("オブジェクトのキー順を無視", "はい" if options.ignore_json_object_key_order else "いいえ"),
+            ("配列順序を無視", "はい" if options.ignore_json_array_order else "いいえ"),
         ]
         for row_index, (label, value) in enumerate(rows, 2):
             cls._write_cell(sheet, row_index, 8, label)

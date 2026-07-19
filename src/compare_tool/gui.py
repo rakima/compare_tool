@@ -71,6 +71,8 @@ class CompareApp:
         self.csv_encoding = tk.StringVar(value=self._csv_encoding_label(saved_options.csv_encoding))
         self.csv_delimiter = tk.StringVar(value=self._csv_delimiter_label(saved_options.csv_delimiter))
         self.ignore_csv_blank_lines = tk.BooleanVar(value=saved_options.ignore_csv_blank_lines)
+        self.ignore_json_object_key_order = tk.BooleanVar(value=saved_options.ignore_json_object_key_order)
+        self.ignore_json_array_order = tk.BooleanVar(value=saved_options.ignore_json_array_order)
         self.view_mode = tk.StringVar(value=saved_view_mode)
         self.status = tk.StringVar(value="ファイルを指定してください")
         self._build()
@@ -188,8 +190,22 @@ class CompareApp:
         self.json_options_frame.grid(row=4, column=0, sticky="ew", pady=(10, 0))
         ttk.Label(
             self.json_options_frame,
-            text="JSON Path単位で比較します。配列はインデックス順で比較します。",
+            text="JSON Path単位で比較します。配列は既定ではインデックス順で比較します。",
         ).grid(row=0, column=0, sticky="w")
+        json_key_order_check = ttk.Checkbutton(
+            self.json_options_frame,
+            text="オブジェクトのキー順を無視",
+            variable=self.ignore_json_object_key_order,
+        )
+        json_key_order_check.grid(row=1, column=0, sticky="w", pady=(9, 0))
+        self.busy_controls.append(json_key_order_check)
+        json_array_order_check = ttk.Checkbutton(
+            self.json_options_frame,
+            text="配列の順序を無視",
+            variable=self.ignore_json_array_order,
+        )
+        json_array_order_check.grid(row=2, column=0, sticky="w", pady=(3, 0))
+        self.busy_controls.append(json_array_order_check)
 
         log_frame = ttk.LabelFrame(main, text="ログ", padding=6)
         log_frame.grid(row=5, column=0, columnspan=3, sticky="nsew")
@@ -412,6 +428,8 @@ class CompareApp:
             csv_encoding=CSV_ENCODINGS[self.csv_encoding.get()],
             csv_delimiter=CSV_DELIMITERS[self.csv_delimiter.get()],
             ignore_csv_blank_lines=self.ignore_csv_blank_lines.get(),
+            ignore_json_object_key_order=self.ignore_json_object_key_order.get(),
+            ignore_json_array_order=self.ignore_json_array_order.get(),
         )
 
     @staticmethod
