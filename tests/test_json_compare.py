@@ -4,9 +4,10 @@ import json
 from pathlib import Path
 
 import pytest
+from openpyxl import load_workbook
 
 from compare_tool.errors import OperationCancelledError, WorkbookReadError
-from compare_tool.json_compare import JSON_SHEET_NAME, JsonComparer, JsonReader
+from compare_tool.json_compare import JSON_SHEET_NAME, JsonComparer, JsonReader, JsonReportWriter
 from compare_tool.models import CompareOptions, DifferenceType
 
 
@@ -94,3 +95,31 @@ def test_json_comparer_can_be_cancelled(tmp_path: Path) -> None:
 
     with pytest.raises(OperationCancelledError):
         JsonComparer().compare(old, new, CompareOptions(), cancel_requested=lambda: True)
+
+
+def test_json_report_writer_outputs_xlsx_report(tmp_path: Path) -> None:
+    old_path = write_json(tmp_path / "old.json", {"name": "old"})
+    new_path = write_json(tmp_path / "new.json", {"name": "new", "items": [1, 2]})
+    old = JsonReader().read(old_path)
+    new = JsonReader().read(new_path)
+    result = JsonComparer().compare(old, new, CompareOptions())
+    output = tmp_path / "output.xlsx"
+
+    JsonReportWriter().write(new_path, output, result)
+
+    workbook = load_workbook(output)
+    assert workbook.sheetnames == ["比較結果", "JSON"]
+    report = workbook["比較結果"]
+    assert report["A11"].value == "追加"
+    assert report["B11"].value == "JSON"
+    assert report["C11"].value == "$.items"
+    assert report["F11"].value is None
+    assert report["H1"].value == "JSON読み込み設定"
+    assert report["I2"].value == "UTF-8 / UTF-8 BOM"
+    assert report["I3"].value == "JSON Path"
+    assert report["I4"].value == "インデックス比較"
+    json_sheet = workbook["JSON"]
+    assert json_sheet["A1"].value == "新JSON"
+    assert json_sheet["A2"].value == "{"
+    assert '"name": "new"' in json_sheet["A3"].value
+    workbook.close()
