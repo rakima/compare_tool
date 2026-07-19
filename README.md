@@ -112,7 +112,7 @@ python -m mypy
 python -m pytest -q
 ```
 
-手動確認用のExcel/CSVサンプルは次のコマンドで `samples` フォルダに作成できます。
+手動確認用のExcel/CSV/JSONサンプルは次のコマンドで `samples` フォルダに作成できます。
 
 ```powershell
 python tools\create_sample_files.py
@@ -137,7 +137,7 @@ python -m pip install -e ".[dev]"
 python -m PyInstaller compare_tool.spec --noconfirm --clean
 ```
 
-作成された実行ファイルは `dist\compare_tool.exe` です。配布前には、別フォルダへコピーして起動し、サンプルExcelで比較できることを確認してください。
+作成された実行ファイルは `dist\compare_tool.exe` です。配布前には、別フォルダへコピーして起動し、サンプルExcel/CSV/JSONで比較できることを確認してください。
 
 GitHub Actionsの `Build Windows App` は手動実行、または `v*` タグのpushでWindows実行ファイルをビルドし、`compare_tool-v<version>-windows` artifactとして保存します。
 
