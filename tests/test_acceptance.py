@@ -448,6 +448,60 @@ def test_xml_options_are_used_and_recorded(tmp_path: Path) -> None:
     workbook.close()
 
 
+def test_invalid_xml_is_reported_through_usecase(tmp_path: Path) -> None:
+    old = make_xml(tmp_path / "old.xml", "<root>\n  <name>broken</root>")
+    new = make_xml(tmp_path / "new.xml", "<root><name>new</name></root>")
+
+    with pytest.raises(WorkbookReadError) as error:
+        CompareUseCase().execute(old, new, tmp_path / "output.xlsx", CompareOptions())
+
+    message = str(error.value)
+    assert "XMLファイルの形式を読み取れません" in message
+    assert "2行" in message
+    assert "開始タグと終了タグ" in message
+
+
+def test_xml_utf8_read_error_is_reported_through_usecase(tmp_path: Path) -> None:
+    old = tmp_path / "old.xml"
+    old.write_bytes(b"\xff\xfe\x00\x80")
+    new = make_xml(tmp_path / "new.xml", "<root><name>new</name></root>")
+
+    with pytest.raises(WorkbookReadError, match="UTF-8 / UTF-8 BOM付きで保存してください"):
+        CompareUseCase().execute(old, new, tmp_path / "output.xlsx", CompareOptions())
+
+
+def test_xml_summary_mode_omits_detail_table_but_keeps_counts(tmp_path: Path) -> None:
+    old = make_xml(tmp_path / "old.xml", '<root enabled="true"><name>old</name></root>')
+    new = make_xml(tmp_path / "new.xml", '<root enabled="false"><name>new</name><item /></root>')
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase().execute(old, new, output, CompareOptions(), detailed=False)
+
+    assert result.count(DifferenceType.MODIFIED) == 2
+    assert result.count(DifferenceType.ADDED) == 1
+    workbook = load_workbook(output)
+    report = workbook["比較結果"]
+    assert report["A2"].value == "変更件数"
+    assert report["B2"].value == 2
+    assert report["A3"].value == "追加件数"
+    assert report["B3"].value == 1
+    assert report["A10"].value is None
+    assert report["H1"].value == "XML読み込み設定"
+    assert workbook["XML"]["A1"].value == "新XML"
+    workbook.close()
+
+
+def test_cancelled_xml_compare_does_not_create_output(tmp_path: Path) -> None:
+    old = make_xml(tmp_path / "old.xml", "<root><name>old</name></root>")
+    new = make_xml(tmp_path / "new.xml", "<root><name>new</name></root>")
+    output = tmp_path / "output.xlsx"
+
+    with pytest.raises(OperationCancelledError):
+        CompareUseCase().execute(old, new, output, CompareOptions(), cancel_requested=lambda: True)
+
+    assert not output.exists()
+
+
 def test_missing_input_file_is_rejected(tmp_path: Path) -> None:
     new = make_workbook(tmp_path / "new.xlsx", {"Data": {}})
     with pytest.raises(InvalidInputError, match="見つかりません"):
