@@ -17,7 +17,7 @@ from .settings import AppSettingsStore
 from .usecase import CompareUseCase
 from .workbook_preparer import SUPPORTED_INPUT_EXTENSIONS
 
-GUI_INPUT_EXTENSIONS = SUPPORTED_INPUT_EXTENSIONS | {".csv"}
+GUI_INPUT_EXTENSIONS = SUPPORTED_INPUT_EXTENSIONS | {".csv", ".json"}
 CSV_ENCODINGS = {
     "自動": "auto",
     "UTF-8 / UTF-8 BOM": "utf-8-sig",
@@ -57,6 +57,7 @@ class CompareApp:
         self.busy_controls: list[ttk.Widget] = []
         self.excel_only_controls: list[ttk.Widget] = []
         self.csv_only_controls: list[ttk.Widget] = []
+        self.table_only_controls: list[ttk.Widget] = []
         self.old_path = tk.StringVar()
         self.new_path = tk.StringVar()
         self.compare_values = tk.BooleanVar(value=saved_options.compare_values)
@@ -131,10 +132,13 @@ class CompareApp:
             radio = ttk.Radiobutton(options, text=text, variable=self.algorithm, value=value)
             radio.grid(row=3, column=column, sticky="w", pady=(9, 0))
             self.busy_controls.append(radio)
+            if value in {CompareAlgorithm.ROW_LCS.value, CompareAlgorithm.KEY_COLUMNS.value}:
+                self.table_only_controls.append(radio)
         ttk.Label(options, text="キー列:").grid(row=4, column=0, sticky="w", pady=(9, 0))
         key_entry = ttk.Entry(options, textvariable=self.key_columns, width=18)
         key_entry.grid(row=4, column=1, sticky="w", pady=(9, 0))
         self.busy_controls.append(key_entry)
+        self.table_only_controls.append(key_entry)
         ttk.Label(options, text="例: A または A,C").grid(row=4, column=2, sticky="w", pady=(9, 0))
         ttk.Label(options, text="CSV文字コード:").grid(row=5, column=0, sticky="w", pady=(9, 0))
         encoding_combo = ttk.Combobox(
@@ -209,9 +213,10 @@ class CompareApp:
         selected = filedialog.askopenfilename(
             title="比較ファイルを選択",
             filetypes=[
-                ("対応ファイル", "*.xlsx *.xls *.csv"),
+                ("対応ファイル", "*.xlsx *.xls *.csv *.json"),
                 ("Excel", "*.xlsx *.xls"),
                 ("CSV", "*.csv"),
+                ("JSON", "*.json"),
             ],
         )
         if selected:
@@ -225,7 +230,7 @@ class CompareApp:
             return
         path = Path(paths[0])
         if path.suffix.lower() not in GUI_INPUT_EXTENSIONS:
-            messagebox.showwarning("対象外ファイル", ".xlsx、.xls、.csv ファイルのみ指定できます。")
+            messagebox.showwarning("対象外ファイル", ".xlsx、.xls、.csv、.json ファイルのみ指定できます。")
             self._log(f"対象外ファイルを拒否しました: {path}")
             return
         variable.set(str(path))
@@ -273,7 +278,10 @@ class CompareApp:
         for label, value in [("旧ファイル", old_value), ("新ファイル", new_value)]:
             path = Path(value)
             if path.suffix.lower() not in GUI_INPUT_EXTENSIONS:
-                messagebox.showwarning("対象外ファイル", f"{label}は .xlsx、.xls、.csv のいずれかを指定してください。")
+                messagebox.showwarning(
+                    "対象外ファイル",
+                    f"{label}は .xlsx、.xls、.csv、.json のいずれかを指定してください。",
+                )
                 self.status.set("対象外ファイル")
                 self._log(f"{label}の対象外ファイルを拒否しました: {path}")
                 return False
@@ -291,7 +299,12 @@ class CompareApp:
 
     @staticmethod
     def _format_family(path: Path) -> str:
-        return "csv" if path.suffix.lower() == ".csv" else "excel"
+        suffix = path.suffix.lower()
+        if suffix == ".csv":
+            return "csv"
+        if suffix == ".json":
+            return "json"
+        return "excel"
 
     def _validate_key_columns(self) -> bool:
         columns = self._key_columns()
@@ -327,12 +340,22 @@ class CompareApp:
             self.compare_formulas.set(False)
             self._set_controls_enabled(self.excel_only_controls, False)
             self._set_controls_enabled(self.csv_only_controls, True)
+            self._set_controls_enabled(self.table_only_controls, True)
         elif family == "excel":
             self._set_controls_enabled(self.excel_only_controls, True)
             self._set_controls_enabled(self.csv_only_controls, False)
+            self._set_controls_enabled(self.table_only_controls, True)
+        elif family == "json":
+            self.compare_formulas.set(False)
+            if self.algorithm.get() != CompareAlgorithm.CELL_COORDINATE.value:
+                self.algorithm.set(CompareAlgorithm.CELL_COORDINATE.value)
+            self._set_controls_enabled(self.excel_only_controls, False)
+            self._set_controls_enabled(self.csv_only_controls, False)
+            self._set_controls_enabled(self.table_only_controls, False)
         else:
             self._set_controls_enabled(self.excel_only_controls, False)
             self._set_controls_enabled(self.csv_only_controls, False)
+            self._set_controls_enabled(self.table_only_controls, False)
 
     def _selected_format_family(self) -> str | None:
         old = self.old_path.get().strip()

@@ -1,5 +1,6 @@
 """End-to-end acceptance tests using real .xlsx files."""
 
+import json
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -47,6 +48,11 @@ def make_csv(
     return path
 
 
+def make_json(path: Path, data: object) -> Path:
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
 def compare(
     tmp_path: Path,
     old_sheets: Mapping[str, Mapping[str, object]],
@@ -68,12 +74,12 @@ def test_same_input_file_is_rejected(tmp_path: Path) -> None:
         CompareUseCase().execute(source, source, tmp_path / "output.xlsx", CompareOptions())
 
 
-@pytest.mark.parametrize("bad_name", ["input.xlsm", "input.json"])
+@pytest.mark.parametrize("bad_name", ["input.xlsm", "input.xml"])
 def test_unsupported_input_extension_is_rejected(tmp_path: Path, bad_name: str) -> None:
     bad = tmp_path / bad_name
     bad.write_bytes(b"not used")
     new = make_workbook(tmp_path / "new.xlsx", {"Data": {}})
-    with pytest.raises(InvalidInputError, match=r"\.xlsx、\.xls、\.csv"):
+    with pytest.raises(InvalidInputError, match=r"\.xlsx、\.xls、\.csv、\.json"):
         CompareUseCase().execute(bad, new, tmp_path / "output.xlsx", CompareOptions())
 
 
@@ -290,6 +296,30 @@ def test_csv_auto_encoding_failure_explains_next_action(tmp_path: Path) -> None:
 
     with pytest.raises(WorkbookReadError, match="UTF-8またはShift_JISで保存し直してください"):
         CompareUseCase().execute(old, new, tmp_path / "output.xlsx", CompareOptions())
+
+
+def test_json_files_are_compared_and_written_to_excel_report(tmp_path: Path) -> None:
+    old = make_json(tmp_path / "old.json", {"name": "old", "removed": True})
+    new = make_json(tmp_path / "new.json", {"name": "new", "items": [1, 2]})
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase().execute(old, new, output, CompareOptions())
+
+    assert result.count(DifferenceType.MODIFIED) == 1
+    assert result.count(DifferenceType.ADDED) == 1
+    assert result.count(DifferenceType.DELETED) == 1
+    workbook = load_workbook(output)
+    assert workbook.sheetnames == ["比較結果", "JSON"]
+    report = workbook["比較結果"]
+    rows = {report.cell(row, 3).value: row for row in range(11, 14)}
+    assert report.cell(rows["$.name"], 1).value == "変更"
+    assert report.cell(rows["$.name"], 2).value == "JSON"
+    assert report.cell(rows["$.name"], 4).value == "old"
+    assert report.cell(rows["$.name"], 5).value == "new"
+    assert report.cell(rows["$.name"], 6).value is None
+    assert report["H1"].value == "JSON読み込み設定"
+    assert workbook["JSON"]["A1"].value == "新JSON"
+    workbook.close()
 
 
 def test_missing_input_file_is_rejected(tmp_path: Path) -> None:

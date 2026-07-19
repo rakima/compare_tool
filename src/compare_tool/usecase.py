@@ -6,6 +6,7 @@ from pathlib import Path
 from .csv_compare import CsvComparer, CsvReader, CsvReportWriter
 from .errors import InvalidInputError, OperationCancelledError
 from .excel import ExcelComparer, ExcelReader, ExcelReportWriter
+from .json_compare import JsonComparer, JsonReader, JsonReportWriter
 from .models import CompareOptions, CompareResult
 from .workbook_preparer import SUPPORTED_INPUT_EXTENSIONS, WorkbookPreparer
 
@@ -24,6 +25,9 @@ class CompareUseCase:
         csv_reader: CsvReader | None = None,
         csv_comparer: CsvComparer | None = None,
         csv_writer: CsvReportWriter | None = None,
+        json_reader: JsonReader | None = None,
+        json_comparer: JsonComparer | None = None,
+        json_writer: JsonReportWriter | None = None,
     ) -> None:
         self.reader = reader or ExcelReader()
         self.comparer = comparer or ExcelComparer()
@@ -32,6 +36,9 @@ class CompareUseCase:
         self.csv_reader = csv_reader or CsvReader()
         self.csv_comparer = csv_comparer or CsvComparer()
         self.csv_writer = csv_writer or CsvReportWriter()
+        self.json_reader = json_reader or JsonReader()
+        self.json_comparer = json_comparer or JsonComparer()
+        self.json_writer = json_writer or JsonReportWriter()
 
     def execute(
         self,
@@ -58,6 +65,8 @@ class CompareUseCase:
         if self._format_family(old) == "csv":
             self._validate_csv_options(options)
             return self._execute_csv(old, new, output, options, detailed, cancel_requested, progress_callback)
+        if self._format_family(old) == "json":
+            return self._execute_json(old, new, output, options, detailed, cancel_requested, progress_callback)
 
         self._raise_if_cancelled(cancel_requested)
         self._notify(progress_callback, "入力ファイルを準備しています...")
@@ -78,6 +87,34 @@ class CompareUseCase:
             self._notify(progress_callback, "差分が多いため、詳細レポートの作成に時間がかかる場合があります。")
         self._notify(progress_callback, "比較結果Excelを作成しています...")
         self.writer.write(prepared_new.prepared_path, output, result, detailed, cancel_requested)
+        self._notify(progress_callback, "比較結果Excelの作成が完了しました。")
+        return result
+
+    def _execute_json(
+        self,
+        old: Path,
+        new: Path,
+        output: Path,
+        options: CompareOptions,
+        detailed: bool,
+        cancel_requested: CancelCheck | None,
+        progress_callback: ProgressCallback | None,
+    ) -> CompareResult:
+        self._raise_if_cancelled(cancel_requested)
+        self._notify(progress_callback, "旧JSONファイルを読み込んでいます...")
+        old_document = self.json_reader.read(old)
+        self._raise_if_cancelled(cancel_requested)
+        self._notify(progress_callback, "新JSONファイルを読み込んでいます...")
+        new_document = self.json_reader.read(new)
+        self._raise_if_cancelled(cancel_requested)
+        self._notify(progress_callback, "差分を検出しています...")
+        result = self.json_comparer.compare(old_document, new_document, options, cancel_requested)
+        self._raise_if_cancelled(cancel_requested)
+        self._notify(progress_callback, f"差分を {result.total:,} 件検出しました。")
+        if detailed and result.total >= LARGE_DIFFERENCE_NOTICE_THRESHOLD:
+            self._notify(progress_callback, "差分が多いため、詳細レポートの作成に時間がかかる場合があります。")
+        self._notify(progress_callback, "比較結果Excelを作成しています...")
+        self.json_writer.write(new, output, result, detailed, cancel_requested)
         self._notify(progress_callback, "比較結果Excelの作成が完了しました。")
         return result
 
@@ -112,8 +149,8 @@ class CompareUseCase:
     @staticmethod
     def _validate(path_value: str | Path, label: str) -> Path:
         path = Path(path_value).expanduser()
-        if path.suffix.lower() not in SUPPORTED_INPUT_EXTENSIONS | {".csv"}:
-            raise InvalidInputError(f"{label}は .xlsx、.xls、.csv のいずれかを指定してください。")
+        if path.suffix.lower() not in SUPPORTED_INPUT_EXTENSIONS | {".csv", ".json"}:
+            raise InvalidInputError(f"{label}は .xlsx、.xls、.csv、.json のいずれかを指定してください。")
         if not path.is_file():
             raise InvalidInputError(f"{label}が見つかりません: {path}")
         return path
@@ -127,7 +164,12 @@ class CompareUseCase:
 
     @staticmethod
     def _format_family(path: Path) -> str:
-        return "csv" if path.suffix.lower() == ".csv" else "excel"
+        suffix = path.suffix.lower()
+        if suffix == ".csv":
+            return "csv"
+        if suffix == ".json":
+            return "json"
+        return "excel"
 
     @staticmethod
     def _validate_csv_options(options: CompareOptions) -> None:
