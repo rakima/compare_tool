@@ -382,11 +382,16 @@ def test_json_array_order_ignore_still_reports_different_array_contents(tmp_path
         CompareOptions(ignore_json_array_order=True),
     )
 
-    assert result.count(DifferenceType.MODIFIED) == 1
-    difference = result.differences[0]
-    assert difference.cell == "$.items"
-    assert difference.old_value == [{"id": 1}, {"id": 2}]
-    assert difference.new_value == [{"id": 2}, {"id": 3}]
+    assert result.count(DifferenceType.DELETED) == 1
+    assert result.count(DifferenceType.ADDED) == 1
+    differences = [
+        (difference.kind, difference.cell, difference.old_value, difference.new_value)
+        for difference in result.differences
+    ]
+    assert differences == [
+        (DifferenceType.DELETED, "$.items[0]", {"id": 1}, None),
+        (DifferenceType.ADDED, "$.items[1]", None, {"id": 3}),
+    ]
 
 
 def test_missing_input_file_is_rejected(tmp_path: Path) -> None:

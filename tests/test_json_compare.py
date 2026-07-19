@@ -110,6 +110,22 @@ def test_json_comparer_can_ignore_array_order(tmp_path: Path) -> None:
     assert ignored.total == 0
 
 
+def test_json_comparer_reports_unmatched_array_items_when_ignoring_order(tmp_path: Path) -> None:
+    old = JsonReader().read(write_json(tmp_path / "old.json", {"items": ["same", "same", "old"]}))
+    new = JsonReader().read(write_json(tmp_path / "new.json", {"items": ["same", "new", "same"]}))
+
+    result = JsonComparer().compare(old, new, CompareOptions(ignore_json_array_order=True))
+
+    differences = [
+        (difference.kind, difference.cell, difference.old_value, difference.new_value)
+        for difference in result.differences
+    ]
+    assert differences == [
+        (DifferenceType.DELETED, "$.items[2]", "old", None),
+        (DifferenceType.ADDED, "$.items[1]", None, "new"),
+    ]
+
+
 def test_json_comparer_escapes_non_identifier_keys(tmp_path: Path) -> None:
     old = JsonReader().read(write_json(tmp_path / "old.json", {"display name": "old"}))
     new = JsonReader().read(write_json(tmp_path / "new.json", {"display name": "new"}))

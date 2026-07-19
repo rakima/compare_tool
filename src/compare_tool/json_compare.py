@@ -145,18 +145,7 @@ class JsonComparer(Comparer[JsonDocument]):
         cancel_requested: CancelCheck | None,
     ) -> None:
         if options.ignore_json_array_order:
-            if self._unordered_array_equal(old, new, options):
-                return
-            differences.append(
-                Difference(
-                    DifferenceType.MODIFIED,
-                    JSON_SHEET_NAME,
-                    path,
-                    old,
-                    new,
-                    value_changed=True,
-                )
-            )
+            self._compare_unordered_array(path, old, new, options, differences, cancel_requested)
             return
 
         common_length = min(len(old), len(new))
@@ -191,10 +180,44 @@ class JsonComparer(Comparer[JsonDocument]):
         return normalize(left) == normalize(right)
 
     @classmethod
-    def _unordered_array_equal(cls, old: list[Any], new: list[Any], options: CompareOptions) -> bool:
-        old_values = sorted(cls._canonical_json_value(value, options) for value in old)
-        new_values = sorted(cls._canonical_json_value(value, options) for value in new)
-        return old_values == new_values
+    def _compare_unordered_array(
+        cls,
+        path: str,
+        old: list[Any],
+        new: list[Any],
+        options: CompareOptions,
+        differences: list[Difference],
+        cancel_requested: CancelCheck | None,
+    ) -> None:
+        unmatched_new = {index: cls._canonical_json_value(value, options) for index, value in enumerate(new)}
+        unmatched_old: list[int] = []
+
+        for old_index, old_value in enumerate(old):
+            cls._raise_if_cancelled(cancel_requested)
+            canonical_old = cls._canonical_json_value(old_value, options)
+            new_index = cls._find_first_match(canonical_old, unmatched_new)
+            if new_index is None:
+                unmatched_old.append(old_index)
+            else:
+                del unmatched_new[new_index]
+
+        for old_index in unmatched_old:
+            cls._raise_if_cancelled(cancel_requested)
+            differences.append(
+                Difference(DifferenceType.DELETED, JSON_SHEET_NAME, f"{path}[{old_index}]", old[old_index])
+            )
+        for new_index in sorted(unmatched_new):
+            cls._raise_if_cancelled(cancel_requested)
+            differences.append(
+                Difference(DifferenceType.ADDED, JSON_SHEET_NAME, f"{path}[{new_index}]", None, new[new_index])
+            )
+
+    @staticmethod
+    def _find_first_match(value: str, candidates: dict[int, str]) -> int | None:
+        for index, candidate in candidates.items():
+            if candidate == value:
+                return index
+        return None
 
     @classmethod
     def _canonical_json_value(cls, value: Any, options: CompareOptions) -> str:
