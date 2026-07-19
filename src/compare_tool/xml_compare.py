@@ -175,9 +175,55 @@ class XmlComparer(Comparer[XmlDocument]):
         new_children = list(new)
         old_child_paths = self._child_paths(path, old_children)
         new_child_paths = self._child_paths(path, new_children)
+        matches = self._child_lcs_matches(old_children, new_children, options, cancel_requested)
+        old_start = 0
+        new_start = 0
 
-        common_length = min(len(old_children), len(new_children))
-        for index in range(common_length):
+        for old_index, new_index in matches:
+            self._compare_child_gap(
+                old_children[old_start:old_index],
+                new_children[new_start:new_index],
+                old_child_paths[old_start:old_index],
+                new_child_paths[new_start:new_index],
+                options,
+                differences,
+                cancel_requested,
+            )
+            self._compare_element(
+                old_child_paths[old_index],
+                old_children[old_index],
+                new_children[new_index],
+                options,
+                differences,
+                cancel_requested,
+            )
+            old_start = old_index + 1
+            new_start = new_index + 1
+
+        self._compare_child_gap(
+            old_children[old_start:],
+            new_children[new_start:],
+            old_child_paths[old_start:],
+            new_child_paths[new_start:],
+            options,
+            differences,
+            cancel_requested,
+        )
+
+    def _compare_child_gap(
+        self,
+        old_children: list[ElementTree.Element],
+        new_children: list[ElementTree.Element],
+        old_child_paths: list[str],
+        new_child_paths: list[str],
+        options: CompareOptions,
+        differences: list[Difference],
+        cancel_requested: CancelCheck | None,
+    ) -> None:
+        index = 0
+        while index < len(old_children) and index < len(new_children):
+            if old_children[index].tag != new_children[index].tag:
+                break
             self._compare_element(
                 old_child_paths[index],
                 old_children[index],
@@ -186,17 +232,41 @@ class XmlComparer(Comparer[XmlDocument]):
                 differences,
                 cancel_requested,
             )
-        for index in range(common_length, len(old_children)):
+            index += 1
+
+        if index == len(old_children) and index == len(new_children):
+            return
+
+        if len(old_children) - index == len(new_children) - index and self._same_tag_sequence(
+            old_children[index:],
+            new_children[index:],
+        ):
+            for offset, (old_child, new_child) in enumerate(
+                zip(old_children[index:], new_children[index:], strict=True),
+                index,
+            ):
+                self._compare_element(
+                    old_child_paths[offset],
+                    old_child,
+                    new_child,
+                    options,
+                    differences,
+                    cancel_requested,
+                )
+            return
+
+        remaining_start = index
+        for index, child in enumerate(old_children[remaining_start:], remaining_start):
             self._raise_if_cancelled(cancel_requested)
             differences.append(
                 Difference(
                     DifferenceType.DELETED,
                     XML_SHEET_NAME,
                     old_child_paths[index],
-                    self._element_summary(old_children[index]),
+                    self._element_summary(child),
                 )
             )
-        for index in range(common_length, len(new_children)):
+        for index, child in enumerate(new_children[remaining_start:], remaining_start):
             self._raise_if_cancelled(cancel_requested)
             differences.append(
                 Difference(
@@ -204,9 +274,71 @@ class XmlComparer(Comparer[XmlDocument]):
                     XML_SHEET_NAME,
                     new_child_paths[index],
                     None,
-                    self._element_summary(new_children[index]),
+                    self._element_summary(child),
                 )
             )
+
+    @classmethod
+    def _child_lcs_matches(
+        cls,
+        old_children: list[ElementTree.Element],
+        new_children: list[ElementTree.Element],
+        options: CompareOptions,
+        cancel_requested: CancelCheck | None,
+    ) -> list[tuple[int, int]]:
+        old_signatures = [cls._element_signature(child, options) for child in old_children]
+        new_signatures = [cls._element_signature(child, options) for child in new_children]
+        row_count = len(old_signatures)
+        column_count = len(new_signatures)
+        lengths = [[0] * (column_count + 1) for _ in range(row_count + 1)]
+
+        for old_index, old_signature in enumerate(old_signatures, 1):
+            cls._raise_if_cancelled(cancel_requested)
+            for new_index, new_signature in enumerate(new_signatures, 1):
+                if old_signature == new_signature:
+                    lengths[old_index][new_index] = lengths[old_index - 1][new_index - 1] + 1
+                else:
+                    lengths[old_index][new_index] = max(
+                        lengths[old_index - 1][new_index],
+                        lengths[old_index][new_index - 1],
+                    )
+
+        matches: list[tuple[int, int]] = []
+        old_index = row_count
+        new_index = column_count
+        while old_index > 0 and new_index > 0:
+            cls._raise_if_cancelled(cancel_requested)
+            if old_signatures[old_index - 1] == new_signatures[new_index - 1]:
+                matches.append((old_index - 1, new_index - 1))
+                old_index -= 1
+                new_index -= 1
+            elif lengths[old_index - 1][new_index] >= lengths[old_index][new_index - 1]:
+                old_index -= 1
+            else:
+                new_index -= 1
+        matches.reverse()
+        return matches
+
+    @classmethod
+    def _element_signature(cls, element: ElementTree.Element, options: CompareOptions) -> str:
+        attributes = (
+            sorted(element.attrib.items()) if options.ignore_xml_attribute_order else list(element.attrib.items())
+        )
+        children = [cls._element_signature(child, options) for child in list(element)]
+        return repr(
+            (
+                cls._display_tag(element.tag),
+                attributes,
+                cls._normalize_value(cls._text_value(element.text, options), options),
+                children,
+            )
+        )
+
+    @staticmethod
+    def _same_tag_sequence(old_children: list[ElementTree.Element], new_children: list[ElementTree.Element]) -> bool:
+        return len(old_children) == len(new_children) and all(
+            old_child.tag == new_child.tag for old_child, new_child in zip(old_children, new_children, strict=True)
+        )
 
     @classmethod
     def _child_paths(cls, parent_path: str, children: list[ElementTree.Element]) -> list[str]:
@@ -239,17 +371,18 @@ class XmlComparer(Comparer[XmlDocument]):
 
     @staticmethod
     def _equal(left: Any, right: Any, options: CompareOptions) -> bool:
-        def normalize(value: Any) -> Any:
-            if options.empty_string_equals_empty and value == "":
-                value = None
-            if isinstance(value, str):
-                if options.ignore_surrounding_whitespace:
-                    value = value.strip()
-                if options.ignore_case:
-                    value = value.casefold()
-            return value
+        return XmlComparer._normalize_value(left, options) == XmlComparer._normalize_value(right, options)
 
-        return normalize(left) == normalize(right)
+    @staticmethod
+    def _normalize_value(value: Any, options: CompareOptions) -> Any:
+        if options.empty_string_equals_empty and value == "":
+            value = None
+        if isinstance(value, str):
+            if options.ignore_surrounding_whitespace:
+                value = value.strip()
+            if options.ignore_case:
+                value = value.casefold()
+        return value
 
     @staticmethod
     def _raise_if_cancelled(cancel_requested: CancelCheck | None) -> None:

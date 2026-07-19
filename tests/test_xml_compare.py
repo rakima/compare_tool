@@ -60,10 +60,11 @@ def test_xml_comparer_reports_text_attribute_and_child_differences(tmp_path: Pat
     }
     assert differences == {
         (DifferenceType.ADDED, "/root/@added", None, "yes"),
+        (DifferenceType.ADDED, "/root/item[1]", None, "<item />"),
         (DifferenceType.DELETED, "/root/@removed", "yes", None),
+        (DifferenceType.DELETED, "/root/obsolete[1]", "<obsolete />", None),
         (DifferenceType.MODIFIED, "/root/@enabled", "true", "false"),
         (DifferenceType.MODIFIED, "/root/name[1]", "old", "new"),
-        (DifferenceType.MODIFIED, "/root/obsolete[1]", "obsolete", "item"),
     }
     assert {difference.sheet for difference in result.differences} == {XML_SHEET_NAME}
 
@@ -79,6 +80,19 @@ def test_xml_comparer_reports_added_and_deleted_children(tmp_path: Path) -> None
     assert difference.kind is DifferenceType.ADDED
     assert difference.cell == "/root/item[3]"
     assert difference.new_value == "<item>C</item>"
+
+
+def test_xml_comparer_uses_lcs_to_avoid_shifted_child_differences(tmp_path: Path) -> None:
+    old = XmlReader().read(write_xml(tmp_path / "old.xml", "<root><item>A</item><item>B</item></root>"))
+    new = XmlReader().read(write_xml(tmp_path / "new.xml", "<root><item>A</item><item>X</item><item>B</item></root>"))
+
+    result = XmlComparer().compare(old, new, CompareOptions())
+
+    assert result.total == 1
+    difference = result.differences[0]
+    assert difference.kind is DifferenceType.ADDED
+    assert difference.cell == "/root/item[2]"
+    assert difference.new_value == "<item>X</item>"
 
 
 def test_xml_comparer_ignores_blank_text_by_default(tmp_path: Path) -> None:
