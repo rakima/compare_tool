@@ -36,6 +36,8 @@ class CompareOptions:
     ignore_csv_blank_lines: bool = True
     ignore_json_object_key_order: bool = True
     ignore_json_array_order: bool = False
+    ignore_xml_attribute_order: bool = True
+    ignore_xml_blank_text: bool = True
 
 
 @dataclass(frozen=True, slots=True)
