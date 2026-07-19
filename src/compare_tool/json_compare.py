@@ -32,11 +32,22 @@ class JsonReader:
             with path.open("r", encoding="utf-8-sig") as stream:
                 return JsonDocument(json.load(stream))
         except UnicodeDecodeError as exc:
-            raise WorkbookReadError(f"JSONファイルをUTF-8として読み取れません: {path}") from exc
+            raise WorkbookReadError(
+                f"JSONファイルをUTF-8として読み取れません: {path}\n"
+                "JSONはUTF-8 / UTF-8 BOM付きで保存してください。"
+                "文字化けする場合は、エディタでUTF-8として保存し直してから再実行してください。"
+            ) from exc
         except json.JSONDecodeError as exc:
-            raise WorkbookReadError(f"JSONファイルの形式を読み取れません: {path}") from exc
+            raise WorkbookReadError(
+                f"JSONファイルの形式を読み取れません: {path}\n"
+                f"{exc.lineno}行 {exc.colno}列付近でJSON構文エラーが発生しました: {exc.msg}\n"
+                "カンマ、引用符、コロン、括弧の対応を確認してください。"
+            ) from exc
         except OSError as exc:
-            raise WorkbookReadError(f"JSONファイルを読み取れません: {path}") from exc
+            raise WorkbookReadError(
+                f"JSONファイルを読み取れません: {path}\n"
+                "ファイルが存在するか、他のアプリで使用中ではないか、読み取り権限があるか確認してください。"
+            ) from exc
 
 
 class JsonComparer(Comparer[JsonDocument]):

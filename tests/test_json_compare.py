@@ -27,10 +27,13 @@ def test_json_reader_reads_utf8_bom_file(tmp_path: Path) -> None:
 
 def test_json_reader_reports_invalid_json(tmp_path: Path) -> None:
     path = tmp_path / "broken.json"
-    path.write_text("{broken", encoding="utf-8")
+    path.write_text('{\n  "name": "broken",\n}', encoding="utf-8")
 
-    with pytest.raises(WorkbookReadError, match="JSONファイルの形式"):
+    with pytest.raises(WorkbookReadError) as error:
         JsonReader().read(path)
+    message = str(error.value)
+    assert "3行 1列付近" in message
+    assert "カンマ、引用符、コロン、括弧" in message
 
 
 def test_json_comparer_reports_modified_added_and_deleted_paths(tmp_path: Path) -> None:
