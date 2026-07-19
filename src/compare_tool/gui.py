@@ -85,7 +85,7 @@ class CompareApp:
         main = ttk.Frame(self.root, padding=14)
         main.pack(fill="both", expand=True)
         main.columnconfigure(1, weight=1)
-        main.rowconfigure(6, weight=1)
+        main.rowconfigure(5, weight=1)
 
         header = ttk.Frame(main)
         header.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 12))
@@ -167,27 +167,8 @@ class CompareApp:
         self.busy_controls.append(blank_line_check)
         self.csv_only_controls.append(blank_line_check)
 
-        actions = ttk.Frame(main)
-        actions.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(0, 10))
-        actions.columnconfigure(5, weight=1)
-        self.compare_button = ttk.Button(actions, text="比較開始", command=self._start_compare)
-        self.compare_button.grid(row=0, column=0, sticky="w")
-        self.cancel_button = ttk.Button(actions, text="キャンセル", command=self._cancel_compare, state="disabled")
-        self.cancel_button.grid(row=0, column=1, sticky="w", padx=(8, 0))
-        self.open_button = ttk.Button(actions, text="出力ファイルを開く", command=self._open_output, state="disabled")
-        self.open_button.grid(row=0, column=2, sticky="w", padx=(8, 0))
-        self.open_folder_button = ttk.Button(
-            actions,
-            text="保存フォルダを開く",
-            command=self._open_output_folder,
-            state="disabled",
-        )
-        self.open_folder_button.grid(row=0, column=3, sticky="w", padx=(8, 0))
-        ttk.Label(actions, text="状態:").grid(row=0, column=4, sticky="w", padx=(14, 4))
-        ttk.Label(actions, textvariable=self.status).grid(row=0, column=5, sticky="ew")
-
         log_frame = ttk.LabelFrame(main, text="ログ", padding=6)
-        log_frame.grid(row=6, column=0, columnspan=3, sticky="nsew")
+        log_frame.grid(row=5, column=0, columnspan=3, sticky="nsew")
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
         self.log = tk.Text(log_frame, height=13, wrap="word", state="disabled")
@@ -195,6 +176,25 @@ class CompareApp:
         self.log.configure(yscrollcommand=scrollbar.set)
         self.log.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
+
+        actions = ttk.Frame(main)
+        actions.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        actions.columnconfigure(1, weight=1)
+        ttk.Label(actions, text="状態:").grid(row=0, column=0, sticky="w", padx=(0, 4))
+        ttk.Label(actions, textvariable=self.status).grid(row=0, column=1, sticky="ew")
+        self.open_button = ttk.Button(actions, text="出力ファイルを開く", command=self._open_output, state="disabled")
+        self.open_button.grid(row=0, column=2, sticky="e", padx=(8, 0))
+        self.open_folder_button = ttk.Button(
+            actions,
+            text="保存フォルダを開く",
+            command=self._open_output_folder,
+            state="disabled",
+        )
+        self.open_folder_button.grid(row=0, column=3, sticky="e", padx=(8, 0))
+        self.cancel_button = ttk.Button(actions, text="キャンセル", command=self._cancel_compare, state="disabled")
+        self.cancel_button.grid(row=0, column=4, sticky="e", padx=(8, 0))
+        self.compare_button = ttk.Button(actions, text="比較開始", command=self._start_compare)
+        self.compare_button.grid(row=0, column=5, sticky="e", padx=(8, 0))
         self._log("起動しました。旧ファイルと新ファイルを指定してください。")
 
     def _file_row(self, parent: ttk.Frame, row: int, label: str, variable: tk.StringVar) -> ttk.Combobox:
