@@ -3,10 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from openpyxl import load_workbook
 
 from compare_tool.errors import OperationCancelledError, WorkbookReadError
 from compare_tool.models import CompareOptions, DifferenceType
-from compare_tool.xml_compare import XML_SHEET_NAME, XmlComparer, XmlReader
+from compare_tool.xml_compare import XML_SHEET_NAME, XmlComparer, XmlReader, XmlReportWriter
 
 
 def write_xml(path: Path, text: str, *, encoding: str = "utf-8") -> Path:
@@ -142,3 +143,35 @@ def test_xml_comparer_can_be_cancelled(tmp_path: Path) -> None:
 
     with pytest.raises(OperationCancelledError):
         XmlComparer().compare(old, new, CompareOptions(), cancel_requested=lambda: True)
+
+
+def test_xml_report_writer_outputs_xlsx_report(tmp_path: Path) -> None:
+    old_path = write_xml(tmp_path / "old.xml", '<root enabled="true"><name>old</name></root>')
+    new_path = write_xml(tmp_path / "new.xml", '<root enabled="false"><name>new</name><item /></root>')
+    old = XmlReader().read(old_path)
+    new = XmlReader().read(new_path)
+    options = CompareOptions(ignore_xml_attribute_order=False, ignore_xml_blank_text=False)
+    result = XmlComparer().compare(old, new, options)
+    output = tmp_path / "output.xlsx"
+
+    XmlReportWriter().write(new_path, output, result, options=options)
+
+    workbook = load_workbook(output)
+    assert workbook.sheetnames == ["比較結果", "XML"]
+    report = workbook["比較結果"]
+    rows = {report.cell(row, 3).value: row for row in range(11, 14)}
+    assert report.cell(rows["/root/@enabled"], 1).value == "変更"
+    assert report.cell(rows["/root/@enabled"], 2).value == "XML"
+    assert report.cell(rows["/root/@enabled"], 4).value == "true"
+    assert report.cell(rows["/root/@enabled"], 5).value == "false"
+    assert report.cell(rows["/root/@enabled"], 6).value is None
+    assert report["H1"].value == "XML読み込み設定"
+    assert report["I2"].value == "UTF-8 / UTF-8 BOM"
+    assert report["I3"].value == "XPath風パス"
+    assert report["I4"].value == "いいえ"
+    assert report["I5"].value == "いいえ"
+    xml_sheet = workbook["XML"]
+    assert xml_sheet["A1"].value == "新XML"
+    assert xml_sheet["A2"].value == '<root enabled="false">'
+    assert xml_sheet["A3"].value == "  <name>new</name>"
+    workbook.close()
