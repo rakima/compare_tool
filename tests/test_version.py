@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
-
-import tomllib
 
 from compare_tool import __version__
 
 
 def test_package_version_matches_project_metadata() -> None:
-    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version = "([^"]+)"$', pyproject, re.MULTILINE)
 
-    assert __version__ == pyproject["project"]["version"]
+    assert match is not None
+    assert __version__ == match.group(1)
