@@ -5,7 +5,7 @@ import tempfile
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from xml.etree import ElementTree
 
 from openpyxl import Workbook
@@ -24,14 +24,17 @@ XML_SHEET_NAME = "XML"
 @dataclass(frozen=True, slots=True)
 class XmlDocument:
     root: ElementTree.Element
+    namespaces: dict[str, str]
 
 
 class XmlReader:
     def read(self, path: Path) -> XmlDocument:
         try:
+            path.read_text(encoding="utf-8-sig")
+            namespaces = self._read_namespaces(path)
             parser = ElementTree.XMLParser(target=ElementTree.TreeBuilder(insert_comments=False))
             with path.open("r", encoding="utf-8-sig") as stream:
-                return XmlDocument(ElementTree.parse(stream, parser=parser).getroot())
+                return XmlDocument(ElementTree.parse(stream, parser=parser).getroot(), namespaces)
         except UnicodeDecodeError as exc:
             raise WorkbookReadError(
                 f"XMLファイルをUTF-8として読み取れません: {path}\n"
@@ -50,6 +53,14 @@ class XmlReader:
                 "ファイルが存在するか、他のアプリで使用中ではないか、読み取り権限があるか確認してください。"
             ) from exc
 
+    @staticmethod
+    def _read_namespaces(path: Path) -> dict[str, str]:
+        namespaces: dict[str, str] = {}
+        for _event, namespace in ElementTree.iterparse(path, events=("start-ns",)):
+            prefix, uri = cast(tuple[str, str], namespace)
+            namespaces.setdefault(uri, prefix)
+        return namespaces
+
 
 class XmlComparer(Comparer[XmlDocument]):
     def compare(
@@ -60,13 +71,15 @@ class XmlComparer(Comparer[XmlDocument]):
         cancel_requested: CancelCheck | None = None,
     ) -> CompareResult:
         differences: list[Difference] = []
+        namespace_prefixes = old.namespaces | new.namespaces
         self._compare_element(
-            f"/{self._display_tag(old.root.tag)}",
+            f"/{self._display_tag(old.root.tag, namespace_prefixes)}",
             old.root,
             new.root,
             options,
             differences,
             cancel_requested,
+            namespace_prefixes,
         )
         return CompareResult(differences)
 
@@ -78,6 +91,7 @@ class XmlComparer(Comparer[XmlDocument]):
         options: CompareOptions,
         differences: list[Difference],
         cancel_requested: CancelCheck | None,
+        namespace_prefixes: dict[str, str],
     ) -> None:
         self._raise_if_cancelled(cancel_requested)
         if old.tag != new.tag:
@@ -86,16 +100,16 @@ class XmlComparer(Comparer[XmlDocument]):
                     DifferenceType.MODIFIED,
                     XML_SHEET_NAME,
                     path,
-                    self._display_tag(old.tag),
-                    self._display_tag(new.tag),
+                    self._display_tag(old.tag, namespace_prefixes),
+                    self._display_tag(new.tag, namespace_prefixes),
                     value_changed=True,
                 )
             )
             return
 
-        self._compare_attributes(path, old, new, options, differences, cancel_requested)
+        self._compare_attributes(path, old, new, options, differences, cancel_requested, namespace_prefixes)
         self._compare_text(path, old, new, options, differences)
-        self._compare_children(path, old, new, options, differences, cancel_requested)
+        self._compare_children(path, old, new, options, differences, cancel_requested, namespace_prefixes)
 
     def _compare_attributes(
         self,
@@ -105,6 +119,7 @@ class XmlComparer(Comparer[XmlDocument]):
         options: CompareOptions,
         differences: list[Difference],
         cancel_requested: CancelCheck | None,
+        namespace_prefixes: dict[str, str],
     ) -> None:
         if not options.ignore_xml_attribute_order and list(old.attrib) != list(new.attrib):
             differences.append(
@@ -120,11 +135,24 @@ class XmlComparer(Comparer[XmlDocument]):
 
         for name in sorted(old.attrib.keys() - new.attrib.keys()):
             self._raise_if_cancelled(cancel_requested)
-            differences.append(Difference(DifferenceType.DELETED, XML_SHEET_NAME, f"{path}/@{name}", old.attrib[name]))
+            differences.append(
+                Difference(
+                    DifferenceType.DELETED,
+                    XML_SHEET_NAME,
+                    f"{path}/@{self._display_tag(name, namespace_prefixes)}",
+                    old.attrib[name],
+                )
+            )
         for name in sorted(new.attrib.keys() - old.attrib.keys()):
             self._raise_if_cancelled(cancel_requested)
             differences.append(
-                Difference(DifferenceType.ADDED, XML_SHEET_NAME, f"{path}/@{name}", None, new.attrib[name])
+                Difference(
+                    DifferenceType.ADDED,
+                    XML_SHEET_NAME,
+                    f"{path}/@{self._display_tag(name, namespace_prefixes)}",
+                    None,
+                    new.attrib[name],
+                )
             )
         for name in sorted(old.attrib.keys() & new.attrib.keys()):
             self._raise_if_cancelled(cancel_requested)
@@ -133,7 +161,7 @@ class XmlComparer(Comparer[XmlDocument]):
                     Difference(
                         DifferenceType.MODIFIED,
                         XML_SHEET_NAME,
-                        f"{path}/@{name}",
+                        f"{path}/@{self._display_tag(name, namespace_prefixes)}",
                         old.attrib[name],
                         new.attrib[name],
                         value_changed=True,
@@ -170,11 +198,12 @@ class XmlComparer(Comparer[XmlDocument]):
         options: CompareOptions,
         differences: list[Difference],
         cancel_requested: CancelCheck | None,
+        namespace_prefixes: dict[str, str],
     ) -> None:
         old_children = list(old)
         new_children = list(new)
-        old_child_paths = self._child_paths(path, old_children)
-        new_child_paths = self._child_paths(path, new_children)
+        old_child_paths = self._child_paths(path, old_children, namespace_prefixes)
+        new_child_paths = self._child_paths(path, new_children, namespace_prefixes)
         keyed_matches = self._keyed_child_matches(old_children, new_children, options)
         matched_old = {old_index for old_index, _new_index in keyed_matches}
         matched_new = {new_index for _old_index, new_index in keyed_matches}
@@ -187,6 +216,7 @@ class XmlComparer(Comparer[XmlDocument]):
                 options,
                 differences,
                 cancel_requested,
+                namespace_prefixes,
             )
 
         remaining_old = [child for index, child in enumerate(old_children) if index not in matched_old]
@@ -206,6 +236,7 @@ class XmlComparer(Comparer[XmlDocument]):
             options,
             differences,
             cancel_requested,
+            namespace_prefixes,
         )
 
     def _compare_children_by_lcs(
@@ -217,6 +248,7 @@ class XmlComparer(Comparer[XmlDocument]):
         options: CompareOptions,
         differences: list[Difference],
         cancel_requested: CancelCheck | None,
+        namespace_prefixes: dict[str, str],
     ) -> None:
         matches = self._child_lcs_matches(old_children, new_children, options, cancel_requested)
         old_start = 0
@@ -231,6 +263,7 @@ class XmlComparer(Comparer[XmlDocument]):
                 options,
                 differences,
                 cancel_requested,
+                namespace_prefixes,
             )
             self._compare_element(
                 old_child_paths[old_index],
@@ -239,6 +272,7 @@ class XmlComparer(Comparer[XmlDocument]):
                 options,
                 differences,
                 cancel_requested,
+                namespace_prefixes,
             )
             old_start = old_index + 1
             new_start = new_index + 1
@@ -251,6 +285,7 @@ class XmlComparer(Comparer[XmlDocument]):
             options,
             differences,
             cancel_requested,
+            namespace_prefixes,
         )
 
     @classmethod
@@ -308,6 +343,7 @@ class XmlComparer(Comparer[XmlDocument]):
         options: CompareOptions,
         differences: list[Difference],
         cancel_requested: CancelCheck | None,
+        namespace_prefixes: dict[str, str],
     ) -> None:
         index = 0
         while index < len(old_children) and index < len(new_children):
@@ -320,6 +356,7 @@ class XmlComparer(Comparer[XmlDocument]):
                 options,
                 differences,
                 cancel_requested,
+                namespace_prefixes,
             )
             index += 1
 
@@ -341,6 +378,7 @@ class XmlComparer(Comparer[XmlDocument]):
                     options,
                     differences,
                     cancel_requested,
+                    namespace_prefixes,
                 )
             return
 
@@ -430,11 +468,16 @@ class XmlComparer(Comparer[XmlDocument]):
         )
 
     @classmethod
-    def _child_paths(cls, parent_path: str, children: list[ElementTree.Element]) -> list[str]:
+    def _child_paths(
+        cls,
+        parent_path: str,
+        children: list[ElementTree.Element],
+        namespace_prefixes: dict[str, str],
+    ) -> list[str]:
         counts: dict[str, int] = {}
         paths: list[str] = []
         for child in children:
-            tag = cls._display_tag(child.tag)
+            tag = cls._display_tag(child.tag, namespace_prefixes)
             counts[tag] = counts.get(tag, 0) + 1
             paths.append(f"{parent_path}/{tag}[{counts[tag]}]")
         return paths
@@ -444,10 +487,13 @@ class XmlComparer(Comparer[XmlDocument]):
         return ElementTree.tostring(element, encoding="unicode", short_empty_elements=True)
 
     @staticmethod
-    def _display_tag(tag: str) -> str:
+    def _display_tag(tag: str, namespace_prefixes: dict[str, str] | None = None) -> str:
         if tag.startswith("{") and "}" in tag:
             namespace, local_name = tag[1:].split("}", 1)
-            return f"{local_name}{{{namespace}}}"
+            prefix = (namespace_prefixes or {}).get(namespace)
+            if prefix:
+                return f"{prefix}:{local_name}"
+            return local_name
         return tag
 
     @classmethod

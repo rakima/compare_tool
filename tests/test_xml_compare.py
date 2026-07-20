@@ -133,6 +133,42 @@ def test_xml_comparer_matches_children_by_name_attribute(tmp_path: Path) -> None
     assert difference.new_value == "Changed"
 
 
+def test_xml_comparer_displays_namespace_prefixes_in_paths(tmp_path: Path) -> None:
+    old = XmlReader().read(
+        write_xml(
+            tmp_path / "old.xml",
+            '<root xmlns:p="urn:product"><p:item p:id="P001"><p:name>old</p:name></p:item></root>',
+        )
+    )
+    new = XmlReader().read(
+        write_xml(
+            tmp_path / "new.xml",
+            '<root xmlns:p="urn:product"><p:item p:id="P001"><p:name>new</p:name></p:item></root>',
+        )
+    )
+
+    result = XmlComparer().compare(old, new, CompareOptions())
+
+    assert result.total == 1
+    difference = result.differences[0]
+    assert difference.cell == "/root/p:item[1]/p:name[1]"
+    assert difference.old_value == "old"
+    assert difference.new_value == "new"
+
+
+def test_xml_comparer_displays_namespace_prefixes_in_attribute_paths(tmp_path: Path) -> None:
+    old = XmlReader().read(write_xml(tmp_path / "old.xml", '<root xmlns:p="urn:product" p:code="old" />'))
+    new = XmlReader().read(write_xml(tmp_path / "new.xml", '<root xmlns:p="urn:product" p:code="new" />'))
+
+    result = XmlComparer().compare(old, new, CompareOptions())
+
+    assert result.total == 1
+    difference = result.differences[0]
+    assert difference.cell == "/root/@p:code"
+    assert difference.old_value == "old"
+    assert difference.new_value == "new"
+
+
 def test_xml_comparer_ignores_blank_text_by_default(tmp_path: Path) -> None:
     old = XmlReader().read(write_xml(tmp_path / "old.xml", "<root><item>A</item></root>"))
     new = XmlReader().read(
