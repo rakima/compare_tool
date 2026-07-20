@@ -16,9 +16,9 @@
 ## Tagging
 
 ```powershell
-git tag v0.4.0
+git tag v0.5.0
 git push origin HEAD
-git push origin v0.4.0
+git push origin v0.5.0
 ```
 
 ## After tagging
