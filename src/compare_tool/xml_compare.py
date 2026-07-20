@@ -175,6 +175,49 @@ class XmlComparer(Comparer[XmlDocument]):
         new_children = list(new)
         old_child_paths = self._child_paths(path, old_children)
         new_child_paths = self._child_paths(path, new_children)
+        keyed_matches = self._keyed_child_matches(old_children, new_children, options)
+        matched_old = {old_index for old_index, _new_index in keyed_matches}
+        matched_new = {new_index for _old_index, new_index in keyed_matches}
+
+        for old_index, new_index in keyed_matches:
+            self._compare_element(
+                old_child_paths[old_index],
+                old_children[old_index],
+                new_children[new_index],
+                options,
+                differences,
+                cancel_requested,
+            )
+
+        remaining_old = [child for index, child in enumerate(old_children) if index not in matched_old]
+        remaining_new = [child for index, child in enumerate(new_children) if index not in matched_new]
+        remaining_old_paths = [
+            child_path for index, child_path in enumerate(old_child_paths) if index not in matched_old
+        ]
+        remaining_new_paths = [
+            child_path for index, child_path in enumerate(new_child_paths) if index not in matched_new
+        ]
+
+        self._compare_children_by_lcs(
+            remaining_old,
+            remaining_new,
+            remaining_old_paths,
+            remaining_new_paths,
+            options,
+            differences,
+            cancel_requested,
+        )
+
+    def _compare_children_by_lcs(
+        self,
+        old_children: list[ElementTree.Element],
+        new_children: list[ElementTree.Element],
+        old_child_paths: list[str],
+        new_child_paths: list[str],
+        options: CompareOptions,
+        differences: list[Difference],
+        cancel_requested: CancelCheck | None,
+    ) -> None:
         matches = self._child_lcs_matches(old_children, new_children, options, cancel_requested)
         old_start = 0
         new_start = 0
@@ -209,6 +252,52 @@ class XmlComparer(Comparer[XmlDocument]):
             differences,
             cancel_requested,
         )
+
+    @classmethod
+    def _keyed_child_matches(
+        cls,
+        old_children: list[ElementTree.Element],
+        new_children: list[ElementTree.Element],
+        options: CompareOptions,
+    ) -> list[tuple[int, int]]:
+        old_keys = cls._unique_child_key_indexes(old_children, options)
+        new_keys = cls._unique_child_key_indexes(new_children, options)
+        return sorted((old_index, new_keys[key]) for key, old_index in old_keys.items() if key in new_keys)
+
+    @classmethod
+    def _unique_child_key_indexes(
+        cls,
+        children: list[ElementTree.Element],
+        options: CompareOptions,
+    ) -> dict[tuple[str, str, object], int]:
+        indexes: dict[tuple[str, str, object], int] = {}
+        duplicated: set[tuple[str, str, object]] = set()
+        for index, child in enumerate(children):
+            key = cls._child_key(child, options)
+            if key is None:
+                continue
+            if key in indexes:
+                duplicated.add(key)
+                del indexes[key]
+                continue
+            if key not in duplicated:
+                indexes[key] = index
+        return indexes
+
+    @classmethod
+    def _child_key(
+        cls,
+        child: ElementTree.Element,
+        options: CompareOptions,
+    ) -> tuple[str, str, object] | None:
+        for attribute in ("id", "name"):
+            if attribute in child.attrib:
+                return (
+                    cls._display_tag(child.tag),
+                    attribute,
+                    cls._normalize_value(child.attrib[attribute], options),
+                )
+        return None
 
     def _compare_child_gap(
         self,

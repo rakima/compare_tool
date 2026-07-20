@@ -95,6 +95,44 @@ def test_xml_comparer_uses_lcs_to_avoid_shifted_child_differences(tmp_path: Path
     assert difference.new_value == "<item>X</item>"
 
 
+def test_xml_comparer_matches_children_by_id_attribute(tmp_path: Path) -> None:
+    old = XmlReader().read(
+        write_xml(tmp_path / "old.xml", '<root><item id="P001" quantity="2" /><item id="P002" quantity="8" /></root>')
+    )
+    new = XmlReader().read(
+        write_xml(tmp_path / "new.xml", '<root><item id="P002" quantity="10" /><item id="P001" quantity="2" /></root>')
+    )
+
+    result = XmlComparer().compare(old, new, CompareOptions())
+
+    assert result.total == 1
+    difference = result.differences[0]
+    assert difference.kind is DifferenceType.MODIFIED
+    assert difference.cell == "/root/item[2]/@quantity"
+    assert difference.old_value == "8"
+    assert difference.new_value == "10"
+
+
+def test_xml_comparer_matches_children_by_name_attribute(tmp_path: Path) -> None:
+    old = XmlReader().read(
+        write_xml(tmp_path / "old.xml", '<root><field name="first">A</field><field name="second">B</field></root>')
+    )
+    new = XmlReader().read(
+        write_xml(
+            tmp_path / "new.xml", '<root><field name="second">Changed</field><field name="first">A</field></root>'
+        )
+    )
+
+    result = XmlComparer().compare(old, new, CompareOptions())
+
+    assert result.total == 1
+    difference = result.differences[0]
+    assert difference.kind is DifferenceType.MODIFIED
+    assert difference.cell == "/root/field[2]"
+    assert difference.old_value == "B"
+    assert difference.new_value == "Changed"
+
+
 def test_xml_comparer_ignores_blank_text_by_default(tmp_path: Path) -> None:
     old = XmlReader().read(write_xml(tmp_path / "old.xml", "<root><item>A</item></root>"))
     new = XmlReader().read(

@@ -467,6 +467,26 @@ def test_xml_child_insert_is_reported_without_shifted_following_changes(tmp_path
     workbook.close()
 
 
+def test_xml_children_are_matched_by_id_attribute_through_usecase(tmp_path: Path) -> None:
+    old = make_xml(tmp_path / "old.xml", '<root><item id="P001" quantity="2" /><item id="P002" quantity="8" /></root>')
+    new = make_xml(tmp_path / "new.xml", '<root><item id="P002" quantity="10" /><item id="P001" quantity="2" /></root>')
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase().execute(old, new, output, CompareOptions())
+
+    assert result.total == 1
+    assert result.count(DifferenceType.MODIFIED) == 1
+    workbook = load_workbook(output)
+    report = workbook["比較結果"]
+    assert report["A11"].value == "変更"
+    assert report["B11"].value == "XML"
+    assert report["C11"].value == "/root/item[2]/@quantity"
+    assert report["D11"].value == "8"
+    assert report["E11"].value == "10"
+    assert report["A12"].value is None
+    workbook.close()
+
+
 def test_invalid_xml_is_reported_through_usecase(tmp_path: Path) -> None:
     old = make_xml(tmp_path / "old.xml", "<root>\n  <name>broken</root>")
     new = make_xml(tmp_path / "new.xml", "<root><name>new</name></root>")
