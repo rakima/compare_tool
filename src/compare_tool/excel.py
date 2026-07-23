@@ -279,9 +279,9 @@ class KeyColumnCompareAlgorithm(ExcelCompareAlgorithm):
         options: CompareOptions,
         cancel_requested: CancelCheck | None = None,
     ) -> list[Difference]:
-        key_columns = self._key_columns(options)
-        old_rows = self._rows_by_key(sheet, old_cells, key_columns, options, "旧ファイル", cancel_requested)
-        new_rows = self._rows_by_key(sheet, new_cells, key_columns, options, "新ファイル", cancel_requested)
+        old_key_columns, new_key_columns = self._key_columns(sheet, old_cells, new_cells, options)
+        old_rows = self._rows_by_key(sheet, old_cells, old_key_columns, options, "旧ファイル", cancel_requested)
+        new_rows = self._rows_by_key(sheet, new_cells, new_key_columns, options, "新ファイル", cancel_requested)
         result: list[Difference] = []
 
         for key in sorted(old_rows.keys() - new_rows.keys()):
@@ -305,19 +305,67 @@ class KeyColumnCompareAlgorithm(ExcelCompareAlgorithm):
             )
         return sorted(result, key=lambda difference: (difference.sheet, difference.cell or "", difference.kind.value))
 
-    @staticmethod
-    def _key_columns(options: CompareOptions) -> tuple[str, ...]:
+    @classmethod
+    def _key_columns(
+        cls,
+        sheet: str,
+        old_cells: dict[str, CellData],
+        new_cells: dict[str, CellData],
+        options: CompareOptions,
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
         if not options.key_columns:
             raise InvalidInputError("キー列比較ではキー列を指定してください。")
-        columns: list[str] = []
-        for column in options.key_columns:
-            normalized = column.strip().upper()
-            if not re.fullmatch(r"[A-Z]{1,3}", normalized):
-                raise InvalidInputError(f"キー列は列名だけを指定してください: {column}")
-            columns.append(get_column_letter(column_index_from_string(normalized)))
-        if len(set(columns)) != len(columns):
+        old_columns: list[str] = []
+        new_columns: list[str] = []
+        for value in options.key_columns:
+            old_column, new_column = cls._resolve_key_column(sheet, old_cells, new_cells, value, options)
+            old_columns.append(old_column)
+            new_columns.append(new_column)
+        if len(set(old_columns)) != len(old_columns) or len(set(new_columns)) != len(new_columns):
             raise InvalidInputError("キー列が重複しています。")
-        return tuple(columns)
+        return tuple(old_columns), tuple(new_columns)
+
+    @classmethod
+    def _resolve_key_column(
+        cls,
+        sheet: str,
+        old_cells: dict[str, CellData],
+        new_cells: dict[str, CellData],
+        value: str,
+        options: CompareOptions,
+    ) -> tuple[str, str]:
+        stripped = value.strip()
+        normalized = stripped.upper()
+        if re.fullmatch(r"[A-Z]{1,3}[1-9][0-9]*", normalized):
+            raise InvalidInputError(f"キー列は列記号または1行目のヘッダー名を指定してください: {value}")
+
+        old_column = cls._header_column(old_cells, stripped, options)
+        new_column = cls._header_column(new_cells, stripped, options)
+        if old_column is not None and new_column is not None:
+            return old_column, new_column
+        if old_column is None and new_column is None and re.fullmatch(r"[A-Z]{1,3}", normalized):
+            column = get_column_letter(column_index_from_string(normalized))
+            return column, column
+        if old_column is None or new_column is None:
+            raise InvalidInputError(f"シート「{sheet}」の1行目にキー列ヘッダー「{stripped}」が見つかりません。")
+        raise AssertionError("unreachable key column resolution state")
+
+    @classmethod
+    def _header_column(
+        cls,
+        cells: dict[str, CellData],
+        header: str,
+        options: CompareOptions,
+    ) -> str | None:
+        expected = cls._normalize(header, options)
+        matches: list[str] = []
+        for coordinate, data in cells.items():
+            column, row = coordinate_from_string(coordinate)
+            if row == 1 and cls._normalize(data.value, options) == expected:
+                matches.append(get_column_letter(column_index_from_string(column)))
+        if len(matches) > 1:
+            raise InvalidInputError(f"1行目のキー列ヘッダー「{header}」が重複しています。")
+        return matches[0] if matches else None
 
     def _rows_by_key(
         self,

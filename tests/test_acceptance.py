@@ -280,6 +280,25 @@ def test_csv_key_column_compare_matches_moved_rows(tmp_path: Path) -> None:
     assert modified.new_value == "new"
 
 
+def test_csv_key_column_compare_accepts_header_name(tmp_path: Path) -> None:
+    old = make_csv(tmp_path / "old.csv", [["id", "value"], [1, "old"]])
+    new = make_csv(tmp_path / "new.csv", [["id", "value"], [2, "other"], [1, "new"]])
+
+    result = CompareUseCase().execute(
+        old,
+        new,
+        tmp_path / "output.xlsx",
+        CompareOptions(algorithm=CompareAlgorithm.KEY_COLUMNS, key_columns=("id",)),
+    )
+
+    assert result.count(DifferenceType.MODIFIED) == 1
+    assert result.count(DifferenceType.ROW_ADDED) == 1
+    modified = [difference for difference in result.differences if difference.kind is DifferenceType.MODIFIED][0]
+    assert modified.cell == "B3"
+    assert modified.old_value == "old"
+    assert modified.new_value == "new"
+
+
 def test_csv_auto_encoding_detects_shift_jis(tmp_path: Path) -> None:
     old = make_csv(
         tmp_path / "old.csv",

@@ -407,14 +407,21 @@ class CompareApp:
     def _validate_key_columns(self) -> bool:
         columns = self._key_columns()
         if not columns:
-            messagebox.showwarning("キー列未指定", "キー列で比較する場合はキー列を指定してください。\n例: A または A,C")
+            messagebox.showwarning(
+                "キー列未指定",
+                "キー列で比較する場合はキー列を指定してください。\n例: A / A,C / 商品ID",
+            )
             self.status.set("キー列を指定してください")
             self._log("キー列未指定のため比較を開始できません。")
             return False
-        invalid = [column for column in columns if not re.fullmatch(r"[A-Z]{1,3}", column)]
-        if invalid:
-            values = ", ".join(invalid)
-            message = f"キー列は列名だけを指定してください。\n不正な指定: {values}\n例: A または A,C"
+        cell_references = [column for column in columns if re.fullmatch(r"[A-Z]{1,3}[1-9][0-9]*", column)]
+        if cell_references:
+            values = ", ".join(cell_references)
+            message = (
+                "キー列は列記号または1行目のヘッダー名を指定してください。\n"
+                f"セル座標は指定できません: {values}\n"
+                "例: A / A,C / 商品ID"
+            )
             messagebox.showwarning("キー列指定エラー", message)
             self.status.set("キー列指定エラー")
             self._log(f"キー列の不正な指定を拒否しました: {values}")
@@ -461,9 +468,9 @@ class CompareApp:
             self.key_columns_entry.state(["!disabled"] if key_mode else ["disabled"])
         if self.key_columns_hint is not None:
             if key_mode:
-                text = "1行目を見ながら列記号を指定してください。例: A または A,C"
+                text = "列記号または1行目のヘッダー名を指定してください。例: A / A,C / 商品ID"
             elif family in {"excel", "csv"}:
-                text = "キー列で比較を選ぶと有効になります。例: A または A,C"
+                text = "キー列で比較を選ぶと有効になります。例: A / A,C / 商品ID"
             else:
                 text = "Excel/CSVのキー列比較で使用します。"
             self.key_columns_hint.configure(text=text)
@@ -529,7 +536,7 @@ class CompareApp:
     def _key_columns(self) -> tuple[str, ...]:
         columns: list[str] = []
         for value in self.key_columns.get().replace("，", ",").split(","):
-            column = value.strip().upper()
+            column = value.strip()
             if column:
                 columns.append(column)
         return tuple(columns)

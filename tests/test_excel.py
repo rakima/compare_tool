@@ -105,6 +105,53 @@ def test_key_column_compare_matches_rows_by_key_and_reports_cell_change() -> Non
     assert actual == [(DifferenceType.MODIFIED, "B5", 10, 20)]
 
 
+def test_key_column_compare_accepts_header_name() -> None:
+    old = ExcelDocument(
+        {
+            "S": {
+                "A1": CellData("ID"),
+                "B1": CellData("Value"),
+                "A2": CellData("001"),
+                "B2": CellData(10),
+            }
+        }
+    )
+    new = ExcelDocument(
+        {
+            "S": {
+                "A1": CellData("ID"),
+                "B1": CellData("Value"),
+                "A5": CellData("001"),
+                "B5": CellData(20),
+            }
+        }
+    )
+
+    result = ExcelComparer().compare(
+        old,
+        new,
+        CompareOptions(algorithm=CompareAlgorithm.KEY_COLUMNS, key_columns=("ID",)),
+    )
+
+    actual = [
+        (difference.kind, difference.cell, difference.old_value, difference.new_value)
+        for difference in result.differences
+    ]
+    assert actual == [(DifferenceType.MODIFIED, "B5", 10, 20)]
+
+
+def test_key_column_compare_rejects_missing_header_name() -> None:
+    old = ExcelDocument({"S": {"A1": CellData("ID"), "A2": CellData("001")}})
+    new = ExcelDocument({"S": {"A1": CellData("Code"), "A2": CellData("001")}})
+
+    with pytest.raises(InvalidInputError, match="キー列ヘッダー"):
+        ExcelComparer().compare(
+            old,
+            new,
+            CompareOptions(algorithm=CompareAlgorithm.KEY_COLUMNS, key_columns=("ID",)),
+        )
+
+
 def test_key_column_compare_reports_added_and_deleted_keys() -> None:
     old = ExcelDocument({"S": {"A2": CellData("001"), "B2": CellData("old")}})
     new = ExcelDocument({"S": {"A3": CellData("002"), "B3": CellData("new")}})
@@ -136,7 +183,7 @@ def test_key_column_compare_rejects_cell_reference_as_key_column() -> None:
     old = ExcelDocument({"S": {"A2": CellData("001")}})
     new = ExcelDocument({"S": {"A2": CellData("001")}})
 
-    with pytest.raises(InvalidInputError, match="列名だけ"):
+    with pytest.raises(InvalidInputError, match="列記号または1行目のヘッダー名"):
         ExcelComparer().compare(
             old,
             new,
