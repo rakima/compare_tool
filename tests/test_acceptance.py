@@ -79,12 +79,12 @@ def test_same_input_file_is_rejected(tmp_path: Path) -> None:
         CompareUseCase().execute(source, source, tmp_path / "output.xlsx", CompareOptions())
 
 
-@pytest.mark.parametrize("bad_name", ["input.xlsm", "input.yaml"])
+@pytest.mark.parametrize("bad_name", ["input.yaml"])
 def test_unsupported_input_extension_is_rejected(tmp_path: Path, bad_name: str) -> None:
     bad = tmp_path / bad_name
     bad.write_bytes(b"not used")
     new = make_workbook(tmp_path / "new.xlsx", {"Data": {}})
-    with pytest.raises(InvalidInputError, match=r"\.xlsx、\.xls、\.csv、\.json、\.xml"):
+    with pytest.raises(InvalidInputError, match=r"\.xlsx、\.xls、\.xlsm、\.csv、\.json、\.xml"):
         CompareUseCase().execute(bad, new, tmp_path / "output.xlsx", CompareOptions())
 
 
@@ -112,6 +112,24 @@ def test_xls_conversion_failure_is_reported(tmp_path: Path) -> None:
             tmp_path / "output.xlsx",
             CompareOptions(),
         )
+
+
+def test_xlsm_input_is_compared_as_excel_workbook(tmp_path: Path) -> None:
+    old = make_workbook(tmp_path / "old.xlsm", {"Data": {"A1": "old", "B1": "=SUM(1,1)"}})
+    new = make_workbook(tmp_path / "new.xlsm", {"Data": {"A1": "new", "B1": "=SUM(1,2)"}})
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase().execute(old, new, output, CompareOptions())
+
+    assert result.count(DifferenceType.MODIFIED) == 2
+    workbook = load_workbook(output)
+    report = workbook["比較結果"]
+    rows = {report.cell(row, 3).value: row for row in range(11, 13)}
+    assert report.cell(rows["A1"], 4).value == "old"
+    assert report.cell(rows["A1"], 5).value == "new"
+    assert report.cell(rows["B1"], 4).value == "'=SUM(1,1)"
+    assert report.cell(rows["B1"], 5).value == "'=SUM(1,2)"
+    workbook.close()
 
 
 def test_xls_input_can_be_prepared_by_injected_converter(tmp_path: Path) -> None:

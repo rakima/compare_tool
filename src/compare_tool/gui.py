@@ -308,8 +308,8 @@ class CompareApp:
         selected = filedialog.askopenfilename(
             title="比較ファイルを選択",
             filetypes=[
-                ("対応ファイル", "*.xlsx *.xls *.csv *.json *.xml"),
-                ("Excel", "*.xlsx *.xls"),
+                ("対応ファイル", "*.xlsx *.xls *.xlsm *.csv *.json *.xml"),
+                ("Excel", "*.xlsx *.xls *.xlsm"),
                 ("CSV", "*.csv"),
                 ("JSON", "*.json"),
                 ("XML", "*.xml"),
@@ -326,7 +326,10 @@ class CompareApp:
             return
         path = Path(paths[0])
         if path.suffix.lower() not in GUI_INPUT_EXTENSIONS:
-            messagebox.showwarning("対象外ファイル", ".xlsx、.xls、.csv、.json、.xml ファイルのみ指定できます。")
+            messagebox.showwarning(
+                "対象外ファイル",
+                ".xlsx、.xls、.xlsm、.csv、.json、.xml ファイルのみ指定できます。",
+            )
             self._log(f"対象外ファイルを拒否しました: {path}")
             return
         variable.set(str(path))
@@ -376,7 +379,7 @@ class CompareApp:
             if path.suffix.lower() not in GUI_INPUT_EXTENSIONS:
                 messagebox.showwarning(
                     "対象外ファイル",
-                    f"{label}は .xlsx、.xls、.csv、.json、.xml のいずれかを指定してください。",
+                    f"{label}は .xlsx、.xls、.xlsm、.csv、.json、.xml のいずれかを指定してください。",
                 )
                 self.status.set("対象外ファイル")
                 self._log(f"{label}の対象外ファイルを拒否しました: {path}")

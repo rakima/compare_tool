@@ -9,8 +9,8 @@ from typing import Any
 
 from .errors import WorkbookConversionError
 
-SUPPORTED_INPUT_EXTENSIONS = frozenset({".xlsx", ".xls"})
-PASS_THROUGH_EXTENSIONS = frozenset({".xlsx"})
+SUPPORTED_INPUT_EXTENSIONS = frozenset({".xlsx", ".xls", ".xlsm"})
+PASS_THROUGH_EXTENSIONS = frozenset({".xlsx", ".xlsm"})
 
 
 @dataclass(frozen=True)
@@ -80,8 +80,8 @@ class ExcelWorkbookConverter:
 class WorkbookPreparer:
     """Prepare input workbooks before they are read by openpyxl.
 
-    `.xlsx` files pass through unchanged. Legacy `.xls` workbooks are converted
-    to temporary `.xlsx` files before openpyxl reads them.
+    `.xlsx` and `.xlsm` files pass through unchanged. Legacy `.xls` workbooks
+    are converted to temporary `.xlsx` files before openpyxl reads them.
     """
 
     def __init__(self, converter: ExcelWorkbookConverter | None = None) -> None:

@@ -196,7 +196,7 @@ class CompareUseCase:
     def _validate(path_value: str | Path, label: str) -> Path:
         path = Path(path_value).expanduser()
         if path.suffix.lower() not in SUPPORTED_INPUT_EXTENSIONS | {".csv", ".json", ".xml"}:
-            raise InvalidInputError(f"{label}は .xlsx、.xls、.csv、.json、.xml のいずれかを指定してください。")
+            raise InvalidInputError(f"{label}は .xlsx、.xls、.xlsm、.csv、.json、.xml のいずれかを指定してください。")
         if not path.is_file():
             raise InvalidInputError(f"{label}が見つかりません: {path}")
         return path
