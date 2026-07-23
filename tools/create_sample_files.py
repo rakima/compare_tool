@@ -9,6 +9,7 @@ from openpyxl.styles import Font, PatternFill
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = ROOT / "samples"
+EXCEL_97_2003_FILE_FORMAT = 56
 
 
 def add_common_sheet(workbook: Workbook, *, new: bool) -> None:
@@ -70,6 +71,33 @@ def create_workbook(path: Path, *, new: bool) -> None:
     unique["A1"] = "新ファイルで追加されたシート" if new else "新ファイルでは削除されるシート"
     workbook.save(path)
     workbook.close()
+
+
+def create_xls_from_xlsx(source: Path, output: Path) -> bool:
+    """Create an Excel 97-2003 workbook using Excel COM when available."""
+    try:
+        import win32com.client
+    except ImportError:
+        print("Skipped .xls samples: pywin32 is not installed.")
+        return False
+
+    excel = None
+    workbook = None
+    try:
+        excel = win32com.client.DispatchEx("Excel.Application")
+        excel.Visible = False
+        excel.DisplayAlerts = False
+        workbook = excel.Workbooks.Open(str(source.resolve()), UpdateLinks=0, ReadOnly=True)
+        workbook.SaveAs(str(output.resolve()), FileFormat=EXCEL_97_2003_FILE_FORMAT)
+    except Exception as exc:
+        print(f"Skipped .xls sample {output.name}: Excel conversion failed: {exc}")
+        return False
+    finally:
+        if workbook is not None:
+            workbook.Close(False)
+        if excel is not None:
+            excel.Quit()
+    return True
 
 
 def create_csv(path: Path, *, new: bool, encoding: str = "utf-8-sig", delimiter: str = ",") -> None:
@@ -181,8 +209,12 @@ def create_xml(path: Path, *, new: bool) -> None:
 
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    create_workbook(OUTPUT_DIR / "比較サンプル_旧.xlsx", new=False)
-    create_workbook(OUTPUT_DIR / "比較サンプル_新.xlsx", new=True)
+    old_xlsx = OUTPUT_DIR / "比較サンプル_旧.xlsx"
+    new_xlsx = OUTPUT_DIR / "比較サンプル_新.xlsx"
+    create_workbook(old_xlsx, new=False)
+    create_workbook(new_xlsx, new=True)
+    create_xls_from_xlsx(old_xlsx, OUTPUT_DIR / "比較サンプル_旧.xls")
+    create_xls_from_xlsx(new_xlsx, OUTPUT_DIR / "比較サンプル_新.xls")
     create_csv(OUTPUT_DIR / "比較サンプル_旧.csv", new=False)
     create_csv(OUTPUT_DIR / "比較サンプル_新.csv", new=True)
     create_csv(OUTPUT_DIR / "比較サンプル_ShiftJIS_Tab_旧.csv", new=False, encoding="cp932", delimiter="\t")

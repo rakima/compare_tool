@@ -160,6 +160,8 @@ python -m pytest -q
 python tools\create_sample_files.py
 ```
 
+`.xlsx`、`.csv`、`.json`、`.xml` のサンプルはPythonだけで作成できます。`.xls` サンプルは、作成した `.xlsx` サンプルをWindows版ExcelでExcel 97-2003形式に保存し直して作成します。Excelまたはpywin32が使えない環境では、`.xls` サンプルだけスキップされます。
+
 同じ品質チェックはGitHub ActionsでもPython 3.10／3.12（Windows）に対して自動実行されます。
 
 大容量・疎なExcelの性能回帰テストは、通常テストと分けて次のコマンドで実行できます。
@@ -179,7 +181,7 @@ python -m pip install -e ".[dev]"
 python -m PyInstaller compare_tool.spec --noconfirm --clean
 ```
 
-作成された実行ファイルは `dist\compare_tool.exe` です。配布前には、別フォルダへコピーして起動し、サンプルExcel/CSV/JSON/XMLで比較できることを確認してください。
+作成された実行ファイルは `dist\compare_tool.exe` です。配布前には、別フォルダへコピーして起動し、サンプルExcel/CSV/JSON/XMLで比較できることを確認してください。`.xls` 対応を確認する場合は、Windows版Excelが入っている環境で `.xls` の旧/新サンプルを比較し、比較結果 `.xlsx` が出力されることと、元の `.xls` が変更されないことを確認してください。
 
 GitHub Actionsの `Build Windows App` は手動実行、または `v*` タグのpushでWindows実行ファイルをビルドし、`compare_tool-v<version>-windows` artifactとして保存します。
 

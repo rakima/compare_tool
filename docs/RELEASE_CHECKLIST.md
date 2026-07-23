@@ -11,6 +11,9 @@
 - Build with `python -m PyInstaller compare_tool.spec --noconfirm --clean`.
 - Launch `dist\compare_tool.exe`.
 - Compare the sample Excel files and confirm the output opens.
+- Compare the sample `.xls` files on a machine with Windows Excel installed and confirm the output opens.
+- Confirm the original `.xls` files are not modified after comparison.
+- Confirm Excel does not remain running after `.xls` comparison.
 - Confirm the GUI title/header show the intended version.
 
 ## Tagging
