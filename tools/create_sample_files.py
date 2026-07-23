@@ -10,6 +10,7 @@ from openpyxl.styles import Font, PatternFill
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = ROOT / "samples"
 EXCEL_97_2003_FILE_FORMAT = 56
+EXCEL_MACRO_ENABLED_FILE_FORMAT = 52
 
 
 def add_common_sheet(workbook: Workbook, *, new: bool) -> None:
@@ -75,10 +76,20 @@ def create_workbook(path: Path, *, new: bool) -> None:
 
 def create_xls_from_xlsx(source: Path, output: Path) -> bool:
     """Create an Excel 97-2003 workbook using Excel COM when available."""
+    return create_excel_com_copy(source, output, EXCEL_97_2003_FILE_FORMAT, ".xls")
+
+
+def create_xlsm_from_xlsx(source: Path, output: Path) -> bool:
+    """Create a macro-enabled workbook container using Excel COM when available."""
+    return create_excel_com_copy(source, output, EXCEL_MACRO_ENABLED_FILE_FORMAT, ".xlsm")
+
+
+def create_excel_com_copy(source: Path, output: Path, file_format: int, label: str) -> bool:
+    """Create an Excel workbook copy using Excel COM when available."""
     try:
         import win32com.client
     except ImportError:
-        print("Skipped .xls samples: pywin32 is not installed.")
+        print(f"Skipped {label} samples: pywin32 is not installed.")
         return False
 
     excel = None
@@ -88,9 +99,9 @@ def create_xls_from_xlsx(source: Path, output: Path) -> bool:
         excel.Visible = False
         excel.DisplayAlerts = False
         workbook = excel.Workbooks.Open(str(source.resolve()), UpdateLinks=0, ReadOnly=True)
-        workbook.SaveAs(str(output.resolve()), FileFormat=EXCEL_97_2003_FILE_FORMAT)
+        workbook.SaveAs(str(output.resolve()), FileFormat=file_format)
     except Exception as exc:
-        print(f"Skipped .xls sample {output.name}: Excel conversion failed: {exc}")
+        print(f"Skipped {label} sample {output.name}: Excel conversion failed: {exc}")
         return False
     finally:
         if workbook is not None:
@@ -227,6 +238,11 @@ def main() -> None:
         OUTPUT_DIR / "比較サンプル_新.xls",
     ):
         print("Created .xls samples.")
+    if create_xlsm_from_xlsx(old_xlsx, OUTPUT_DIR / "比較サンプル_旧.xlsm") and create_xlsm_from_xlsx(
+        new_xlsx,
+        OUTPUT_DIR / "比較サンプル_新.xlsm",
+    ):
+        print("Created .xlsm samples.")
     create_csv(OUTPUT_DIR / "比較サンプル_旧.csv", new=False)
     create_csv(OUTPUT_DIR / "比較サンプル_新.csv", new=True)
     create_csv(OUTPUT_DIR / "比較サンプル_ShiftJIS_Tab_旧.csv", new=False, encoding="cp932", delimiter="\t")
