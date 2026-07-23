@@ -144,6 +144,101 @@ def test_xls_input_can_be_prepared_by_injected_converter(tmp_path: Path) -> None
     workbook.close()
 
 
+def test_xls_inputs_can_both_be_prepared_by_injected_converter(tmp_path: Path) -> None:
+    class FakeWorkbookPreparer(WorkbookPreparer):
+        def __init__(self, converted_old: Path, converted_new: Path) -> None:
+            self.converted_old = converted_old
+            self.converted_new = converted_new
+
+        def prepare(self, path: Path) -> PreparedWorkbook:
+            if path.name == "old.xls":
+                return PreparedWorkbook(path, self.converted_old, converted=True)
+            if path.name == "new.xls":
+                return PreparedWorkbook(path, self.converted_new, converted=True)
+            return super().prepare(path)
+
+    old_xls = tmp_path / "old.xls"
+    new_xls = tmp_path / "new.xls"
+    old_xls.write_bytes(b"legacy old workbook placeholder")
+    new_xls.write_bytes(b"legacy new workbook placeholder")
+    converted_old = make_workbook(tmp_path / "converted_old.xlsx", {"Data": {"A1": "old"}})
+    converted_new = make_workbook(tmp_path / "converted_new.xlsx", {"Data": {"A1": "new"}})
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase(
+        workbook_preparer=FakeWorkbookPreparer(converted_old, converted_new),
+    ).execute(old_xls, new_xls, output, CompareOptions())
+
+    assert result.count(DifferenceType.MODIFIED) == 1
+    workbook = load_workbook(output)
+    assert workbook["Data"]["A1"].value == "new"
+    assert workbook["比較結果"]["D11"].value == "old"
+    assert workbook["比較結果"]["E11"].value == "new"
+    workbook.close()
+
+
+def test_converted_xls_temporary_files_are_removed_after_success(tmp_path: Path) -> None:
+    class TemporaryWorkbookPreparer(WorkbookPreparer):
+        def __init__(self) -> None:
+            self.converted_old = tmp_path / "old_converted.xlsx"
+            self.converted_new = tmp_path / "new_converted.xlsx"
+
+        def prepare(self, path: Path) -> PreparedWorkbook:
+            if path.name == "old.xls":
+                make_workbook(self.converted_old, {"Data": {"A1": "old"}})
+                return PreparedWorkbook(path, self.converted_old, converted=True)
+            if path.name == "new.xls":
+                make_workbook(self.converted_new, {"Data": {"A1": "new"}})
+                return PreparedWorkbook(path, self.converted_new, converted=True)
+            return super().prepare(path)
+
+    old_xls = tmp_path / "old.xls"
+    new_xls = tmp_path / "new.xls"
+    old_xls.write_bytes(b"legacy old workbook placeholder")
+    new_xls.write_bytes(b"legacy new workbook placeholder")
+    preparer = TemporaryWorkbookPreparer()
+
+    CompareUseCase(workbook_preparer=preparer).execute(
+        old_xls,
+        new_xls,
+        tmp_path / "output.xlsx",
+        CompareOptions(),
+    )
+
+    assert not preparer.converted_old.exists()
+    assert not preparer.converted_new.exists()
+
+
+def test_converted_xls_temporary_file_is_removed_when_second_prepare_fails(tmp_path: Path) -> None:
+    class PartiallyFailingWorkbookPreparer(WorkbookPreparer):
+        def __init__(self) -> None:
+            self.converted_old = tmp_path / "old_converted.xlsx"
+
+        def prepare(self, path: Path) -> PreparedWorkbook:
+            if path.name == "old.xls":
+                make_workbook(self.converted_old, {"Data": {"A1": "old"}})
+                return PreparedWorkbook(path, self.converted_old, converted=True)
+            if path.name == "new.xls":
+                raise WorkbookConversionError("new workbook conversion failed")
+            return super().prepare(path)
+
+    old_xls = tmp_path / "old.xls"
+    new_xls = tmp_path / "new.xls"
+    old_xls.write_bytes(b"legacy old workbook placeholder")
+    new_xls.write_bytes(b"legacy new workbook placeholder")
+    preparer = PartiallyFailingWorkbookPreparer()
+
+    with pytest.raises(WorkbookConversionError, match="new workbook conversion failed"):
+        CompareUseCase(workbook_preparer=preparer).execute(
+            old_xls,
+            new_xls,
+            tmp_path / "output.xlsx",
+            CompareOptions(),
+        )
+
+    assert not preparer.converted_old.exists()
+
+
 def test_csv_files_are_compared_and_written_to_excel_report(tmp_path: Path) -> None:
     old = make_csv(tmp_path / "old.csv", [["id", "value"], [1, "old"], [2, "keep"]])
     new = make_csv(tmp_path / "new.csv", [["id", "value"], [1, "new"], [2, "keep"], [3, "added"]])
