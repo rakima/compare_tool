@@ -159,7 +159,7 @@ class CompareApp:
         self.busy_controls.append(self.key_columns_entry)
         self.key_columns_hint = ttk.Label(
             self.table_options_frame,
-            text="キー列で比較を選ぶと有効になります。例: A または A,C",
+            text="キー列で比較を選ぶと有効になります。例: A / A,C / 商品ID",
         )
         self.key_columns_hint.grid(
             row=1,
