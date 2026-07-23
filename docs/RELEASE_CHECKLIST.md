@@ -12,16 +12,18 @@
 - Launch `dist\compare_tool.exe`.
 - Compare the sample Excel files and confirm the output opens.
 - Compare the sample `.xls` files on a machine with Windows Excel installed and confirm the output opens.
+- Compare the sample `.xlsm` files and confirm the output opens as `.xlsx`.
 - Confirm the original `.xls` files are not modified after comparison.
+- Confirm the original `.xlsm` files are not modified after comparison.
 - Confirm Excel does not remain running after `.xls` comparison.
 - Confirm the GUI title/header show the intended version.
 
 ## Tagging
 
 ```powershell
-git tag v0.6.0
+git tag v0.7.0
 git push origin HEAD
-git push origin v0.6.0
+git push origin v0.7.0
 ```
 
 ## After tagging
