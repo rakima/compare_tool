@@ -96,6 +96,7 @@ class AppSettingsStore:
                 raw.get("ignore_json_array_order"),
                 defaults.ignore_json_array_order,
             ),
+            json_array_key=self._string(raw.get("json_array_key"), defaults.json_array_key),
             ignore_xml_attribute_order=self._bool(
                 raw.get("ignore_xml_attribute_order"),
                 defaults.ignore_xml_attribute_order,
@@ -121,6 +122,7 @@ class AppSettingsStore:
             "ignore_csv_blank_lines": options.ignore_csv_blank_lines,
             "ignore_json_object_key_order": options.ignore_json_object_key_order,
             "ignore_json_array_order": options.ignore_json_array_order,
+            "json_array_key": options.json_array_key,
             "ignore_xml_attribute_order": options.ignore_xml_attribute_order,
             "ignore_xml_blank_text": options.ignore_xml_blank_text,
         }

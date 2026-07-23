@@ -14,7 +14,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.worksheet import Worksheet
 
 from .comparer import CancelCheck, Comparer
-from .errors import OperationCancelledError, OutputWriteError, WorkbookReadError
+from .errors import InvalidInputError, OperationCancelledError, OutputWriteError, WorkbookReadError
 from .excel import ExcelReportWriter
 from .models import CompareOptions, CompareResult, Difference, DifferenceType
 
@@ -144,6 +144,10 @@ class JsonComparer(Comparer[JsonDocument]):
         differences: list[Difference],
         cancel_requested: CancelCheck | None,
     ) -> None:
+        if options.json_array_key and self._can_compare_keyed_array(old, new, options.json_array_key):
+            self._compare_keyed_array(path, old, new, options, differences, cancel_requested)
+            return
+
         if options.ignore_json_array_order:
             self._compare_unordered_array(path, old, new, options, differences, cancel_requested)
             return
@@ -218,6 +222,92 @@ class JsonComparer(Comparer[JsonDocument]):
             if candidate == value:
                 return index
         return None
+
+    def _compare_keyed_array(
+        self,
+        path: str,
+        old: list[Any],
+        new: list[Any],
+        options: CompareOptions,
+        differences: list[Difference],
+        cancel_requested: CancelCheck | None,
+    ) -> None:
+        key = options.json_array_key.strip()
+        old_items = self._keyed_items(path, old, key, options, "旧JSON")
+        new_items = self._keyed_items(path, new, key, options, "新JSON")
+
+        old_keys = set(old_items)
+        new_keys = set(new_items)
+        for item_key in sorted(old_keys - new_keys, key=self._sort_key):
+            self._raise_if_cancelled(cancel_requested)
+            differences.append(
+                Difference(
+                    DifferenceType.DELETED,
+                    JSON_SHEET_NAME,
+                    self._keyed_array_path(path, key, old_items[item_key][0]),
+                    old_items[item_key][1],
+                )
+            )
+        for item_key in sorted(new_keys - old_keys, key=self._sort_key):
+            self._raise_if_cancelled(cancel_requested)
+            differences.append(
+                Difference(
+                    DifferenceType.ADDED,
+                    JSON_SHEET_NAME,
+                    self._keyed_array_path(path, key, new_items[item_key][0]),
+                    None,
+                    new_items[item_key][1],
+                )
+            )
+        for item_key in sorted(old_keys & new_keys, key=self._sort_key):
+            self._compare_value(
+                self._keyed_array_path(path, key, new_items[item_key][0]),
+                old_items[item_key][1],
+                new_items[item_key][1],
+                options,
+                differences,
+                cancel_requested,
+            )
+
+    @classmethod
+    def _keyed_items(
+        cls,
+        path: str,
+        items: list[Any],
+        key: str,
+        options: CompareOptions,
+        label: str,
+    ) -> dict[str, tuple[Any, dict[str, Any]]]:
+        keyed: dict[str, tuple[Any, dict[str, Any]]] = {}
+        for index, item in enumerate(items):
+            raw_key = item[key]
+            normalized_key = cls._canonical_json_value(raw_key, options)
+            if normalized_key in keyed:
+                raise InvalidInputError(
+                    f"JSON配列キー `{key}` の値が重複しています: {path}[{index}] ({label})\n"
+                    "キー指定比較では、同じ配列内のキー値が一意になるようにしてください。"
+                )
+            keyed[normalized_key] = (raw_key, item)
+        return keyed
+
+    @staticmethod
+    def _can_compare_keyed_array(old: list[Any], new: list[Any], key: str) -> bool:
+        normalized_key = key.strip()
+        if not normalized_key:
+            return False
+        return all(isinstance(item, dict) and normalized_key in item for item in [*old, *new])
+
+    @staticmethod
+    def _keyed_array_path(base: str, key: str, value: Any) -> str:
+        display_value = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        if key.isidentifier():
+            return f"{base}[{key}={display_value}]"
+        escaped = key.replace("\\", "\\\\").replace("'", "\\'")
+        return f"{base}['{escaped}'={display_value}]"
+
+    @staticmethod
+    def _sort_key(value: str) -> str:
+        return value
 
     @classmethod
     def _canonical_json_value(cls, value: Any, options: CompareOptions) -> str:
@@ -354,6 +444,7 @@ class JsonReportWriter(ExcelReportWriter):
             ("比較位置", "JSON Path"),
             ("オブジェクトのキー順を無視", "はい" if options.ignore_json_object_key_order else "いいえ"),
             ("配列順序を無視", "はい" if options.ignore_json_array_order else "いいえ"),
+            ("配列キー", options.json_array_key or "未指定"),
         ]
         for row_index, (label, value) in enumerate(rows, 2):
             cls._write_cell(sheet, row_index, 8, label)

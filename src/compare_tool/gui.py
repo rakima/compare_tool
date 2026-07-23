@@ -74,6 +74,7 @@ class CompareApp:
         self.ignore_csv_blank_lines = tk.BooleanVar(value=saved_options.ignore_csv_blank_lines)
         self.ignore_json_object_key_order = tk.BooleanVar(value=saved_options.ignore_json_object_key_order)
         self.ignore_json_array_order = tk.BooleanVar(value=saved_options.ignore_json_array_order)
+        self.json_array_key = tk.StringVar(value=saved_options.json_array_key)
         self.ignore_xml_attribute_order = tk.BooleanVar(value=saved_options.ignore_xml_attribute_order)
         self.ignore_xml_blank_text = tk.BooleanVar(value=saved_options.ignore_xml_blank_text)
         self.view_mode = tk.StringVar(value=saved_view_mode)
@@ -209,6 +210,17 @@ class CompareApp:
         )
         json_array_order_check.grid(row=2, column=0, sticky="w", pady=(3, 0))
         self.busy_controls.append(json_array_order_check)
+        ttk.Label(self.json_options_frame, text="配列キー:").grid(row=3, column=0, sticky="w", pady=(9, 0))
+        json_array_key_entry = ttk.Entry(self.json_options_frame, textvariable=self.json_array_key, width=24)
+        json_array_key_entry.grid(row=3, column=1, sticky="w", pady=(9, 0))
+        self.busy_controls.append(json_array_key_entry)
+        ttk.Label(self.json_options_frame, text="例: id または name").grid(
+            row=3,
+            column=2,
+            sticky="w",
+            padx=(8, 0),
+            pady=(9, 0),
+        )
 
         self.xml_options_frame = ttk.LabelFrame(options, text="XMLオプション", padding=8)
         self.xml_options_frame.grid(row=5, column=0, sticky="ew", pady=(10, 0))
@@ -458,6 +470,7 @@ class CompareApp:
             ignore_csv_blank_lines=self.ignore_csv_blank_lines.get(),
             ignore_json_object_key_order=self.ignore_json_object_key_order.get(),
             ignore_json_array_order=self.ignore_json_array_order.get(),
+            json_array_key=self.json_array_key.get().strip(),
             ignore_xml_attribute_order=self.ignore_xml_attribute_order.get(),
             ignore_xml_blank_text=self.ignore_xml_blank_text.get(),
         )

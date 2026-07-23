@@ -503,6 +503,34 @@ def test_json_array_order_ignore_still_reports_different_array_contents(tmp_path
     ]
 
 
+def test_json_array_key_compare_matches_reordered_objects_through_usecase(tmp_path: Path) -> None:
+    old = make_json(
+        tmp_path / "old.json",
+        {"items": [{"id": "P001", "price": 100}, {"id": "P002", "price": 200}]},
+    )
+    new = make_json(
+        tmp_path / "new.json",
+        {"items": [{"id": "P002", "price": 250}, {"id": "P001", "price": 100}]},
+    )
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase().execute(old, new, output, CompareOptions(json_array_key="id"))
+
+    assert result.count(DifferenceType.MODIFIED) == 1
+    difference = result.differences[0]
+    assert difference.cell == '$.items[id="P002"].price'
+    assert difference.old_value == 200
+    assert difference.new_value == 250
+    workbook = load_workbook(output)
+    report = workbook["比較結果"]
+    assert report["C11"].value == '$.items[id="P002"].price'
+    assert report["D11"].value == 200
+    assert report["E11"].value == 250
+    assert report["H6"].value == "配列キー"
+    assert report["I6"].value == "id"
+    workbook.close()
+
+
 def test_xml_files_are_compared_and_written_to_excel_report(tmp_path: Path) -> None:
     old = make_xml(tmp_path / "old.xml", '<root enabled="true"><name>old</name></root>')
     new = make_xml(tmp_path / "new.xml", '<root enabled="false"><name>new</name><item /></root>')
@@ -728,6 +756,7 @@ def test_compare_options_and_view_mode_are_persisted(tmp_path: Path) -> None:
         ignore_csv_blank_lines=False,
         ignore_json_object_key_order=False,
         ignore_json_array_order=True,
+        json_array_key="id",
         ignore_xml_attribute_order=False,
         ignore_xml_blank_text=False,
     )

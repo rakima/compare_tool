@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from openpyxl import load_workbook
 
-from compare_tool.errors import OperationCancelledError, WorkbookReadError
+from compare_tool.errors import InvalidInputError, OperationCancelledError, WorkbookReadError
 from compare_tool.json_compare import JSON_SHEET_NAME, JsonComparer, JsonReader, JsonReportWriter
 from compare_tool.models import CompareOptions, DifferenceType
 
@@ -126,6 +126,48 @@ def test_json_comparer_reports_unmatched_array_items_when_ignoring_order(tmp_pat
     ]
 
 
+def test_json_comparer_matches_array_objects_by_key(tmp_path: Path) -> None:
+    old = JsonReader().read(
+        write_json(
+            tmp_path / "old.json",
+            {"items": [{"id": "P001", "price": 100}, {"id": "P002", "price": 200}]},
+        )
+    )
+    new = JsonReader().read(
+        write_json(
+            tmp_path / "new.json",
+            {"items": [{"id": "P002", "price": 250}, {"id": "P001", "price": 100}]},
+        )
+    )
+
+    result = JsonComparer().compare(old, new, CompareOptions(json_array_key="id"))
+
+    assert [
+        (difference.kind, difference.cell, difference.old_value, difference.new_value)
+        for difference in result.differences
+    ] == [(DifferenceType.MODIFIED, '$.items[id="P002"].price', 200, 250)]
+
+
+def test_json_comparer_reports_keyed_array_added_and_deleted_items(tmp_path: Path) -> None:
+    old = JsonReader().read(write_json(tmp_path / "old.json", {"items": [{"id": "P001"}, {"id": "P002"}]}))
+    new = JsonReader().read(write_json(tmp_path / "new.json", {"items": [{"id": "P002"}, {"id": "P003"}]}))
+
+    result = JsonComparer().compare(old, new, CompareOptions(json_array_key="id"))
+
+    assert [(difference.kind, difference.cell) for difference in result.differences] == [
+        (DifferenceType.DELETED, '$.items[id="P001"]'),
+        (DifferenceType.ADDED, '$.items[id="P003"]'),
+    ]
+
+
+def test_json_comparer_rejects_duplicate_array_key_values(tmp_path: Path) -> None:
+    old = JsonReader().read(write_json(tmp_path / "old.json", {"items": [{"id": "P001"}, {"id": "P001"}]}))
+    new = JsonReader().read(write_json(tmp_path / "new.json", {"items": [{"id": "P001"}]}))
+
+    with pytest.raises(InvalidInputError, match="JSON配列キー `id` の値が重複"):
+        JsonComparer().compare(old, new, CompareOptions(json_array_key="id"))
+
+
 def test_json_comparer_escapes_non_identifier_keys(tmp_path: Path) -> None:
     old = JsonReader().read(write_json(tmp_path / "old.json", {"display name": "old"}))
     new = JsonReader().read(write_json(tmp_path / "new.json", {"display name": "new"}))
@@ -155,7 +197,7 @@ def test_json_report_writer_outputs_xlsx_report(tmp_path: Path) -> None:
         new_path,
         output,
         result,
-        options=CompareOptions(ignore_json_object_key_order=False, ignore_json_array_order=True),
+        options=CompareOptions(ignore_json_object_key_order=False, ignore_json_array_order=True, json_array_key="id"),
     )
 
     workbook = load_workbook(output)
@@ -170,6 +212,7 @@ def test_json_report_writer_outputs_xlsx_report(tmp_path: Path) -> None:
     assert report["I3"].value == "JSON Path"
     assert report["I4"].value == "いいえ"
     assert report["I5"].value == "はい"
+    assert report["I6"].value == "id"
     json_sheet = workbook["JSON"]
     assert json_sheet["A1"].value == "新JSON"
     assert json_sheet["A2"].value == "{"
