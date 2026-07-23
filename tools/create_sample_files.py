@@ -213,16 +213,23 @@ def main() -> None:
     new_xlsx = OUTPUT_DIR / "比較サンプル_新.xlsx"
     create_workbook(old_xlsx, new=False)
     create_workbook(new_xlsx, new=True)
-    create_xls_from_xlsx(old_xlsx, OUTPUT_DIR / "比較サンプル_旧.xls")
-    create_xls_from_xlsx(new_xlsx, OUTPUT_DIR / "比較サンプル_新.xls")
+    print("Created .xlsx samples.")
+    if create_xls_from_xlsx(old_xlsx, OUTPUT_DIR / "比較サンプル_旧.xls") and create_xls_from_xlsx(
+        new_xlsx,
+        OUTPUT_DIR / "比較サンプル_新.xls",
+    ):
+        print("Created .xls samples.")
     create_csv(OUTPUT_DIR / "比較サンプル_旧.csv", new=False)
     create_csv(OUTPUT_DIR / "比較サンプル_新.csv", new=True)
     create_csv(OUTPUT_DIR / "比較サンプル_ShiftJIS_Tab_旧.csv", new=False, encoding="cp932", delimiter="\t")
     create_csv(OUTPUT_DIR / "比較サンプル_ShiftJIS_Tab_新.csv", new=True, encoding="cp932", delimiter="\t")
+    print("Created .csv samples.")
     create_json(OUTPUT_DIR / "比較サンプル_旧.json", new=False)
     create_json(OUTPUT_DIR / "比較サンプル_新.json", new=True)
+    print("Created .json samples.")
     create_xml(OUTPUT_DIR / "比較サンプル_旧.xml", new=False)
     create_xml(OUTPUT_DIR / "比較サンプル_新.xml", new=True)
+    print("Created .xml samples.")
     print(f"Created sample files in {OUTPUT_DIR}")
 
 
