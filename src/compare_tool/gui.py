@@ -60,6 +60,8 @@ class CompareApp:
         self.csv_options_frame: ttk.LabelFrame | None = None
         self.json_options_frame: ttk.LabelFrame | None = None
         self.xml_options_frame: ttk.LabelFrame | None = None
+        self.key_columns_entry: ttk.Entry | None = None
+        self.key_columns_hint: ttk.Label | None = None
         self.old_path = tk.StringVar()
         self.new_path = tk.StringVar()
         self.compare_values = tk.BooleanVar(value=saved_options.compare_values)
@@ -83,6 +85,7 @@ class CompareApp:
         self._build()
         self.old_path.trace_add("write", self._on_input_path_changed)
         self.new_path.trace_add("write", self._on_input_path_changed)
+        self.algorithm.trace_add("write", self._on_compare_algorithm_changed)
         self._update_option_states()
 
     def _build(self) -> None:
@@ -151,10 +154,14 @@ class CompareApp:
             radio.grid(row=0, column=column, sticky="w", padx=(0, 16))
             self.busy_controls.append(radio)
         ttk.Label(self.table_options_frame, text="キー列:").grid(row=1, column=0, sticky="w", pady=(9, 0))
-        key_entry = ttk.Entry(self.table_options_frame, textvariable=self.key_columns, width=18)
-        key_entry.grid(row=1, column=1, sticky="w", pady=(9, 0))
-        self.busy_controls.append(key_entry)
-        ttk.Label(self.table_options_frame, text="例: A または A,C").grid(
+        self.key_columns_entry = ttk.Entry(self.table_options_frame, textvariable=self.key_columns, width=18)
+        self.key_columns_entry.grid(row=1, column=1, sticky="w", pady=(9, 0))
+        self.busy_controls.append(self.key_columns_entry)
+        self.key_columns_hint = ttk.Label(
+            self.table_options_frame,
+            text="キー列で比較を選ぶと有効になります。例: A または A,C",
+        )
+        self.key_columns_hint.grid(
             row=1,
             column=2,
             sticky="w",
@@ -422,6 +429,9 @@ class CompareApp:
     def _on_input_path_changed(self, *_args: object) -> None:
         self._update_option_states()
 
+    def _on_compare_algorithm_changed(self, *_args: object) -> None:
+        self._update_option_states()
+
     def _update_option_states(self) -> None:
         if self.is_busy:
             return
@@ -432,6 +442,7 @@ class CompareApp:
         self._set_frame_visible(self.csv_options_frame, family == "csv")
         self._set_frame_visible(self.json_options_frame, family == "json")
         self._set_frame_visible(self.xml_options_frame, family == "xml")
+        self._update_key_columns_state(family)
 
         if family == "csv":
             self.compare_formulas.set(False)
@@ -443,6 +454,19 @@ class CompareApp:
                 self.algorithm.set(CompareAlgorithm.CELL_COORDINATE.value)
         else:
             self.compare_formulas.set(False)
+
+    def _update_key_columns_state(self, family: str | None) -> None:
+        key_mode = family in {"excel", "csv"} and self.algorithm.get() == CompareAlgorithm.KEY_COLUMNS.value
+        if self.key_columns_entry is not None:
+            self.key_columns_entry.state(["!disabled"] if key_mode else ["disabled"])
+        if self.key_columns_hint is not None:
+            if key_mode:
+                text = "1行目を見ながら列記号を指定してください。例: A または A,C"
+            elif family in {"excel", "csv"}:
+                text = "キー列で比較を選ぶと有効になります。例: A または A,C"
+            else:
+                text = "Excel/CSVのキー列比較で使用します。"
+            self.key_columns_hint.configure(text=text)
 
     def _selected_format_family(self) -> str | None:
         old = self.old_path.get().strip()
