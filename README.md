@@ -165,6 +165,8 @@ python tools\create_sample_files.py
 
 `.xlsx`、`.csv`、`.json`、`.xml` のサンプルはPythonだけで作成できます。`.xls` サンプルは、作成した `.xlsx` サンプルをWindows版ExcelでExcel 97-2003形式に保存し直して作成します。Excelまたはpywin32が使えない環境では、`.xls` サンプルだけスキップされます。
 
+XMLサンプルには `code` 属性で対応付ける確認用要素も含まれます。XML比較で `XML要素キー属性` に `code` を指定すると、順序が変わった要素を `code` 値で対応付けて比較できます。
+
 同じ品質チェックはGitHub ActionsでもPython 3.10／3.12（Windows）に対して自動実行されます。
 
 大容量・疎なExcelの性能回帰テストは、通常テストと分けて次のコマンドで実行できます。

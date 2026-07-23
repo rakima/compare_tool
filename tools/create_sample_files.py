@@ -181,6 +181,10 @@ def create_xml(path: Path, *, new: bool) -> None:
     <item id="P002" quantity="10" />
     <item id="P004" quantity="4" />
   </items>
+  <suppliers>
+    <supplier code="S002" rank="A">西日本商事</supplier>
+    <supplier code="S001" rank="A">東日本商事</supplier>
+  </suppliers>
   <note>Sample</note>
 </catalog>
 """
@@ -200,6 +204,10 @@ def create_xml(path: Path, *, new: bool) -> None:
     <item id="P002" quantity="8" />
     <item id="P003" quantity="5" />
   </items>
+  <suppliers>
+    <supplier code="S001" rank="A">東日本商事</supplier>
+    <supplier code="S002" rank="B">西日本商事</supplier>
+  </suppliers>
   <note> Sample </note>
 </catalog>
 """
