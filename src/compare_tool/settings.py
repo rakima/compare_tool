@@ -105,6 +105,10 @@ class AppSettingsStore:
                 raw.get("ignore_xml_blank_text"),
                 defaults.ignore_xml_blank_text,
             ),
+            xml_element_key_attribute=self._string(
+                raw.get("xml_element_key_attribute"),
+                defaults.xml_element_key_attribute,
+            ),
         )
 
     def save_compare_options(self, options: CompareOptions) -> None:
@@ -125,6 +129,7 @@ class AppSettingsStore:
             "json_array_key": options.json_array_key,
             "ignore_xml_attribute_order": options.ignore_xml_attribute_order,
             "ignore_xml_blank_text": options.ignore_xml_blank_text,
+            "xml_element_key_attribute": options.xml_element_key_attribute,
         }
         self._write(data)
 

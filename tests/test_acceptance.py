@@ -619,6 +619,34 @@ def test_xml_children_are_matched_by_id_attribute_through_usecase(tmp_path: Path
     workbook.close()
 
 
+def test_xml_children_are_matched_by_configured_attribute_through_usecase(tmp_path: Path) -> None:
+    old = make_xml(
+        tmp_path / "old.xml",
+        '<root><item code="P001" quantity="2" /><item code="P002" quantity="8" /></root>',
+    )
+    new = make_xml(
+        tmp_path / "new.xml",
+        '<root><item code="P002" quantity="10" /><item code="P001" quantity="2" /></root>',
+    )
+    output = tmp_path / "output.xlsx"
+
+    result = CompareUseCase().execute(old, new, output, CompareOptions(xml_element_key_attribute="code"))
+
+    assert result.total == 1
+    assert result.count(DifferenceType.MODIFIED) == 1
+    workbook = load_workbook(output)
+    report = workbook["比較結果"]
+    assert report["A11"].value == "変更"
+    assert report["B11"].value == "XML"
+    assert report["C11"].value == "/root/item[2]/@quantity"
+    assert report["D11"].value == "8"
+    assert report["E11"].value == "10"
+    assert report["H6"].value == "要素キー属性"
+    assert report["I6"].value == "code"
+    assert report["A12"].value is None
+    workbook.close()
+
+
 def test_invalid_xml_is_reported_through_usecase(tmp_path: Path) -> None:
     old = make_xml(tmp_path / "old.xml", "<root>\n  <name>broken</root>")
     new = make_xml(tmp_path / "new.xml", "<root><name>new</name></root>")
@@ -759,6 +787,7 @@ def test_compare_options_and_view_mode_are_persisted(tmp_path: Path) -> None:
         json_array_key="id",
         ignore_xml_attribute_order=False,
         ignore_xml_blank_text=False,
+        xml_element_key_attribute="code",
     )
 
     settings.save_compare_options(options)

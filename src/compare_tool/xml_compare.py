@@ -325,7 +325,9 @@ class XmlComparer(Comparer[XmlDocument]):
         child: ElementTree.Element,
         options: CompareOptions,
     ) -> tuple[str, str, object] | None:
-        for attribute in ("id", "name"):
+        configured_attribute = options.xml_element_key_attribute.strip()
+        attributes = (configured_attribute,) if configured_attribute else ("id", "name")
+        for attribute in attributes:
             if attribute in child.attrib:
                 return (
                     cls._display_tag(child.tag),
@@ -635,6 +637,7 @@ class XmlReportWriter(ExcelReportWriter):
             ("比較位置", "XPath風パス"),
             ("属性順を無視", "はい" if options.ignore_xml_attribute_order else "いいえ"),
             ("空白のみテキストを無視", "はい" if options.ignore_xml_blank_text else "いいえ"),
+            ("要素キー属性", options.xml_element_key_attribute or "自動(id/name)"),
         ]
         for row_index, (label, value) in enumerate(rows, 2):
             cls._write_cell(sheet, row_index, 8, label)

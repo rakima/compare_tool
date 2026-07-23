@@ -133,6 +133,43 @@ def test_xml_comparer_matches_children_by_name_attribute(tmp_path: Path) -> None
     assert difference.new_value == "Changed"
 
 
+def test_xml_comparer_matches_children_by_configured_attribute(tmp_path: Path) -> None:
+    old = XmlReader().read(
+        write_xml(
+            tmp_path / "old.xml",
+            '<root><item code="P001" quantity="2" /><item code="P002" quantity="8" /></root>',
+        )
+    )
+    new = XmlReader().read(
+        write_xml(
+            tmp_path / "new.xml",
+            '<root><item code="P002" quantity="10" /><item code="P001" quantity="2" /></root>',
+        )
+    )
+
+    result = XmlComparer().compare(old, new, CompareOptions(xml_element_key_attribute="code"))
+
+    assert result.total == 1
+    difference = result.differences[0]
+    assert difference.kind is DifferenceType.MODIFIED
+    assert difference.cell == "/root/item[2]/@quantity"
+    assert difference.old_value == "8"
+    assert difference.new_value == "10"
+
+
+def test_xml_comparer_falls_back_to_lcs_when_configured_attribute_is_missing(tmp_path: Path) -> None:
+    old = XmlReader().read(
+        write_xml(tmp_path / "old.xml", '<root><item id="P001" /><item id="P002" quantity="8" /></root>')
+    )
+    new = XmlReader().read(
+        write_xml(tmp_path / "new.xml", '<root><item id="P002" quantity="10" /><item id="P001" /></root>')
+    )
+
+    result = XmlComparer().compare(old, new, CompareOptions(xml_element_key_attribute="code"))
+
+    assert result.total > 1
+
+
 def test_xml_comparer_displays_namespace_prefixes_in_paths(tmp_path: Path) -> None:
     old = XmlReader().read(
         write_xml(
@@ -238,7 +275,11 @@ def test_xml_report_writer_outputs_xlsx_report(tmp_path: Path) -> None:
     new_path = write_xml(tmp_path / "new.xml", '<root enabled="false"><name>new</name><item /></root>')
     old = XmlReader().read(old_path)
     new = XmlReader().read(new_path)
-    options = CompareOptions(ignore_xml_attribute_order=False, ignore_xml_blank_text=False)
+    options = CompareOptions(
+        ignore_xml_attribute_order=False,
+        ignore_xml_blank_text=False,
+        xml_element_key_attribute="code",
+    )
     result = XmlComparer().compare(old, new, options)
     output = tmp_path / "output.xlsx"
 
@@ -258,6 +299,7 @@ def test_xml_report_writer_outputs_xlsx_report(tmp_path: Path) -> None:
     assert report["I3"].value == "XPath風パス"
     assert report["I4"].value == "いいえ"
     assert report["I5"].value == "いいえ"
+    assert report["I6"].value == "code"
     xml_sheet = workbook["XML"]
     assert xml_sheet["A1"].value == "新XML"
     assert xml_sheet["A2"].value == '<root enabled="false">'

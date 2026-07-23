@@ -77,6 +77,7 @@ class CompareApp:
         self.json_array_key = tk.StringVar(value=saved_options.json_array_key)
         self.ignore_xml_attribute_order = tk.BooleanVar(value=saved_options.ignore_xml_attribute_order)
         self.ignore_xml_blank_text = tk.BooleanVar(value=saved_options.ignore_xml_blank_text)
+        self.xml_element_key_attribute = tk.StringVar(value=saved_options.xml_element_key_attribute)
         self.view_mode = tk.StringVar(value=saved_view_mode)
         self.status = tk.StringVar(value="ファイルを指定してください")
         self._build()
@@ -242,6 +243,17 @@ class CompareApp:
         )
         xml_blank_text_check.grid(row=2, column=0, sticky="w", pady=(3, 0))
         self.busy_controls.append(xml_blank_text_check)
+        ttk.Label(self.xml_options_frame, text="要素キー属性:").grid(row=3, column=0, sticky="w", pady=(9, 0))
+        xml_key_entry = ttk.Entry(self.xml_options_frame, textvariable=self.xml_element_key_attribute, width=24)
+        xml_key_entry.grid(row=3, column=1, sticky="w", pady=(9, 0))
+        self.busy_controls.append(xml_key_entry)
+        ttk.Label(self.xml_options_frame, text="未指定なら id/name を自動使用").grid(
+            row=3,
+            column=2,
+            sticky="w",
+            padx=(8, 0),
+            pady=(9, 0),
+        )
 
         log_frame = ttk.LabelFrame(main, text="ログ", padding=6)
         log_frame.grid(row=5, column=0, columnspan=3, sticky="nsew")
@@ -473,6 +485,7 @@ class CompareApp:
             json_array_key=self.json_array_key.get().strip(),
             ignore_xml_attribute_order=self.ignore_xml_attribute_order.get(),
             ignore_xml_blank_text=self.ignore_xml_blank_text.get(),
+            xml_element_key_attribute=self.xml_element_key_attribute.get().strip(),
         )
 
     @staticmethod

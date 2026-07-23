@@ -39,6 +39,7 @@ class CompareOptions:
     json_array_key: str = ""
     ignore_xml_attribute_order: bool = True
     ignore_xml_blank_text: bool = True
+    xml_element_key_attribute: str = ""
 
 
 @dataclass(frozen=True, slots=True)
