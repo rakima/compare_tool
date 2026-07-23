@@ -19,7 +19,7 @@ from compare_tool.excel import ExcelReportWriter
 from compare_tool.models import CompareAlgorithm, CompareOptions, CompareResult, Difference, DifferenceType
 from compare_tool.settings import AppSettingsStore
 from compare_tool.usecase import CompareUseCase
-from compare_tool.workbook_preparer import PreparedWorkbook, WorkbookPreparer
+from compare_tool.workbook_preparer import ExcelWorkbookConverter, PreparedWorkbook, WorkbookPreparer
 
 
 def make_workbook(path: Path, sheets: Mapping[str, Mapping[str, object]]) -> Path:
@@ -96,13 +96,22 @@ def test_mixed_input_formats_are_rejected(tmp_path: Path) -> None:
         CompareUseCase().execute(old, new, tmp_path / "output.xlsx", CompareOptions())
 
 
-def test_xls_input_reaches_conversion_layer(tmp_path: Path) -> None:
+def test_xls_conversion_failure_is_reported(tmp_path: Path) -> None:
+    class FailingConverter(ExcelWorkbookConverter):
+        def convert(self, path: Path) -> Path:
+            raise WorkbookConversionError("simulated conversion failure")
+
     old = tmp_path / "old.xls"
     old.write_bytes(b"legacy workbook placeholder")
     new = make_workbook(tmp_path / "new.xlsx", {"Data": {}})
 
-    with pytest.raises(WorkbookConversionError, match=r"\.xls ファイルの変換機能"):
-        CompareUseCase().execute(old, new, tmp_path / "output.xlsx", CompareOptions())
+    with pytest.raises(WorkbookConversionError, match="simulated conversion failure"):
+        CompareUseCase(workbook_preparer=WorkbookPreparer(FailingConverter())).execute(
+            old,
+            new,
+            tmp_path / "output.xlsx",
+            CompareOptions(),
+        )
 
 
 def test_xls_input_can_be_prepared_by_injected_converter(tmp_path: Path) -> None:

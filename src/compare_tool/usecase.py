@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 
 from .csv_compare import CsvComparer, CsvReader, CsvReportWriter
@@ -8,7 +9,7 @@ from .errors import InvalidInputError, OperationCancelledError
 from .excel import ExcelComparer, ExcelReader, ExcelReportWriter
 from .json_compare import JsonComparer, JsonReader, JsonReportWriter
 from .models import CompareOptions, CompareResult
-from .workbook_preparer import SUPPORTED_INPUT_EXTENSIONS, WorkbookPreparer
+from .workbook_preparer import SUPPORTED_INPUT_EXTENSIONS, PreparedWorkbook, WorkbookPreparer
 from .xml_compare import XmlComparer, XmlReader, XmlReportWriter
 
 CancelCheck = Callable[[], bool]
@@ -79,25 +80,33 @@ class CompareUseCase:
 
         self._raise_if_cancelled(cancel_requested)
         self._notify(progress_callback, "入力ファイルを準備しています...")
-        prepared_old = self.workbook_preparer.prepare(old)
-        prepared_new = self.workbook_preparer.prepare(new)
-        self._raise_if_cancelled(cancel_requested)
-        self._notify(progress_callback, "旧ファイルを読み込んでいます...")
-        old_document = self.reader.read(prepared_old.prepared_path)
-        self._raise_if_cancelled(cancel_requested)
-        self._notify(progress_callback, "新ファイルを読み込んでいます...")
-        new_document = self.reader.read(prepared_new.prepared_path)
-        self._raise_if_cancelled(cancel_requested)
-        self._notify(progress_callback, "差分を検出しています...")
-        result = self.comparer.compare(old_document, new_document, options, cancel_requested)
-        self._raise_if_cancelled(cancel_requested)
-        self._notify(progress_callback, f"差分を {result.total:,} 件検出しました。")
-        if detailed and result.total >= LARGE_DIFFERENCE_NOTICE_THRESHOLD:
-            self._notify(progress_callback, "差分が多いため、詳細レポートの作成に時間がかかる場合があります。")
-        self._notify(progress_callback, "比較結果Excelを作成しています...")
-        self.writer.write(prepared_new.prepared_path, output, result, detailed, cancel_requested)
-        self._notify(progress_callback, "比較結果Excelの作成が完了しました。")
-        return result
+        prepared_old: PreparedWorkbook | None = None
+        prepared_new: PreparedWorkbook | None = None
+        try:
+            prepared_old = self.workbook_preparer.prepare(old)
+            prepared_new = self.workbook_preparer.prepare(new)
+            self._raise_if_cancelled(cancel_requested)
+            self._notify(progress_callback, "旧ファイルを読み込んでいます...")
+            old_document = self.reader.read(prepared_old.prepared_path)
+            self._raise_if_cancelled(cancel_requested)
+            self._notify(progress_callback, "新ファイルを読み込んでいます...")
+            new_document = self.reader.read(prepared_new.prepared_path)
+            self._raise_if_cancelled(cancel_requested)
+            self._notify(progress_callback, "差分を検出しています...")
+            result = self.comparer.compare(old_document, new_document, options, cancel_requested)
+            self._raise_if_cancelled(cancel_requested)
+            self._notify(progress_callback, f"差分を {result.total:,} 件検出しました。")
+            if detailed and result.total >= LARGE_DIFFERENCE_NOTICE_THRESHOLD:
+                self._notify(progress_callback, "差分が多いため、詳細レポートの作成に時間がかかる場合があります。")
+            self._notify(progress_callback, "比較結果Excelを作成しています...")
+            self.writer.write(prepared_new.prepared_path, output, result, detailed, cancel_requested)
+            self._notify(progress_callback, "比較結果Excelの作成が完了しました。")
+            return result
+        finally:
+            if prepared_old is not None:
+                self._cleanup_prepared(prepared_old)
+            if prepared_new is not None:
+                self._cleanup_prepared(prepared_new)
 
     def _execute_xml(
         self,
@@ -228,3 +237,10 @@ class CompareUseCase:
     def _notify(progress_callback: ProgressCallback | None, message: str) -> None:
         if progress_callback is not None:
             progress_callback(message)
+
+    @staticmethod
+    def _cleanup_prepared(prepared: PreparedWorkbook) -> None:
+        if not prepared.converted:
+            return
+        with suppress(OSError):
+            prepared.prepared_path.unlink(missing_ok=True)
